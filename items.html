@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mark Items</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; background: #f5f5f5; padding: 16px; }
+  .back { display: inline-block; margin-bottom: 12px; font-size: 0.85rem; color: #1a1a2e; text-decoration: none; }
+  h2 { margin-bottom: 16px; font-size: 1.1rem; }
+  .img-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 16px; }
+  .img-list img {
+    width: 70px; height: 70px; object-fit: cover; border-radius: 8px;
+    cursor: pointer; border: 2px solid transparent;
+  }
+  .img-list img.selected { border-color: #1a1a2e; }
+  .canvas-wrap { position: relative; margin-bottom: 16px; border-radius: 8px; overflow: hidden; }
+  .canvas-wrap img { width: 100%; display: block; }
+  .canvas-wrap canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; }
+  .coords-display { font-size: 0.8rem; color: #666; margin-bottom: 12px; }
+  .form { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .form label { font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px; }
+  .form input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; margin-bottom: 10px; }
+  .form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form button { width: 100%; padding: 12px; background: #1a1a2e; color: #fff; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer; }
+  .form button:disabled { opacity: 0.5; }
+  .msg { font-size: 0.85rem; margin-top: 10px; padding: 8px; border-radius: 6px; display: none; }
+  .msg.error { background: #ffebee; color: #c62828; display: block; }
+  .msg.success { background: #e8f5e9; color: #2e7d32; display: block; }
+  .existing { margin-top: 16px; }
+  .existing h3 { font-size: 0.9rem; margin-bottom: 8px; }
+  .existing table { width: 100%; border-collapse: collapse; font-size: 0.8rem; background: #fff; border-radius: 6px; overflow: hidden; }
+  .existing th, .existing td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
+  .existing th { background: #1a1a2e; color: #fff; }
+  .placeholder { text-align: center; color: #999; padding: 40px 0; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<a class="back" href="index.html">← Back to Expenses</a>
+<h2>🏷️ Mark Items on Receipt</h2>
+
+<div id="imgList" class="img-list"></div>
+<div id="noImages" class="placeholder">No images yet. Upload one first.</div>
+
+<div id="canvasArea" style="display:none;">
+  <div class="canvas-wrap">
+    <img id="mainImg">
+    <canvas id="overlay"></canvas>
+  </div>
+  <div class="coords-display" id="coordsText">Tap on the image to mark an item location</div>
+</div>
+
+<div class="form" id="itemForm" style="display:none;">
+  <label>Item Name</label>
+  <input type="text" id="fItem" placeholder="e.g. Milk, Bread, Eggs">
+  <div class="row">
+    <div>
+      <label>Quantity</label>
+      <input type="number" id="fQty" min="1" step="1" placeholder="1">
+    </div>
+    <div>
+      <label>Comment</label>
+      <input type="text" id="fComment" placeholder="e.g. full cream, 2 pcs">
+    </div>
+  </div>
+  <button id="btnSave" onclick="saveItem()">Save Item</button>
+  <div class="msg" id="msg"></div>
+</div>
+
+<div class="existing" id="existingItems" style="display:none;">
+  <h3>Existing Items</h3>
+  <table>
+    <thead><tr><th>Item</th><th>X</th><th>Y</th><th>Qty</th><th>Comment</th></tr></thead>
+    <tbody id="existingBody"></tbody>
+  </table>
+</div>
+
+<script>
+const GH = { owner: "camdevelopers", repo: "storesoffinancialstoresatrandomrepoandstuffvariablesvariedforever", branch: "main" };
+
+const token = localStorage.getItem("fe_token");
+const user = localStorage.getItem("fe_user");
+if (!token || !user) {
+  document.body.innerHTML = `<p style="text-align:center;margin-top:40px;"><a href="index.html">Sign in first →</a></p>`;
+  throw new Error("Not authenticated");
+}
+
+function authHeaders() {
+  return {
+    "Authorization": `Bearer ${token}`,
+    "Accept": "application/vnd.github.v3+json",
+    "Content-Type": "application/json"
+  };
+}
+
+let images = [];       // [{name, url}]
+let selectedImg = null; // {name, url}
+let selectedPoint = null; // {x, y} normalized 0-1
+let markers = [];      // existing markers to redraw
+
+// ===== LOAD IMAGE LIST =====
+async function loadImages() {
+  const res = await fetch(
+    `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${user}`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) return;
+  const files = await res.json();
+  images = files
+    .filter(f => f.type === "file" && /\.(jpe?g|png|webp)$/i.test(f.name))
+    .map(f => ({ name: f.name, url: f.download_url }));
+
+  const list = document.getElementById("imgList");
+  if (!images.length) {
+    document.getElementById("noImages").style.display = "block";
+    return;
+  }
+  document.getElementById("noImages").style.display = "none";
+  list.innerHTML = images.map((img, i) =>
+    `<img src="${img.url}" data-i="${i}" onclick="selectImage(${i})" alt="${img.name}">`
+  ).join("");
+}
+
+// ===== SELECT IMAGE =====
+function selectImage(i) {
+  selectedImg = images[i];
+  selectedPoint = null;
+  markers = [];
+
+  // Highlight
+  document.querySelectorAll(".img-list img").forEach(el => el.classList.remove("selected"));
+  document.querySelectorAll(".img-list img")[i].classList.add("selected");
+
+  // Show canvas
+  const mainImg = document.getElementById("mainImg");
+  mainImg.src = selectedImg.url;
+  mainImg.onload = () => {
+    const canvas = document.getElementById("overlay");
+    canvas.width = mainImg.naturalWidth;
+    canvas.height = mainImg.naturalHeight;
+    document.getElementById("canvasArea").style.display = "block";
+    document.getElementById("itemForm").style.display = "block";
+    document.getElementById("coordsText").textContent = "Tap on the image to mark an item location";
+    loadExistingItems();
+  };
+}
+
+// ===== CANVAS: tap to place point =====
+document.getElementById("overlay").addEventListener("click", function(e) {
+  const rect = this.getBoundingClientRect();
+  const x = Math.round(((e.clientX - rect.left) / rect.width) * this.width);
+  const y = Math.round(((e.clientY - rect.top) / rect.height) * this.height);
+  selectedPoint = { x, y };
+  drawMarkers();
+  document.getElementById("coordsText").textContent = `Marked: (${x}, ${y})`;
+});
+
+function drawMarkers() {
+  const canvas = document.getElementById("overlay");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw existing markers
+  markers.forEach((m, i) => {
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, 12, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(67, 160, 71, 0.5)";
+    ctx.fill();
+    ctx.strokeStyle = "#43a047";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 14px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(i + 1), m.x, m.y);
+  });
+
+  // Draw selected point (red)
+  if (selectedPoint) {
+    ctx.beginPath();
+    ctx.arc(selectedPoint.x, selectedPoint.y, 14, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(229, 57, 53, 0.5)";
+    ctx.fill();
+    ctx.strokeStyle = "#e53935";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+}
+
+// ===== LOAD EXISTING ITEMS FROM CSV =====
+async function loadExistingItems() {
+  if (!selectedImg) return;
+  const csvName = selectedImg.name.replace(/\.\w+$/, ".csv");
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${user}/${csvName}`;
+  const res = await fetch(url, { headers: authHeaders() });
+  if (!res.ok) {
+    markers = [];
+    document.getElementById("existingItems").style.display = "none";
+    drawMarkers();
+    return;
+  }
+  const data = await res.json();
+  const csv = atob(data.content);
+  const lines = csv.trim().split("\n").slice(1).filter(l => l.trim());
+  markers = lines.map(l => {
+    const [item, x, y, qty, comment] = l.split(",");
+    return { item, x: +x, y: +y, qty, comment };
+  });
+
+  const tbody = document.getElementById("existingBody");
+  tbody.innerHTML = markers.map((m, i) =>
+    `<tr><td>${m.item}</td><td>${m.x}</td><td>${m.y}</td><td>${m.qty}</td><td>${m.comment}</td></tr>`
+  ).join("");
+  document.getElementById("existingItems").style.display = "block";
+  drawMarkers();
+}
+
+// ===== SAVE ITEM =====
+async function saveItem() {
+  const item = document.getElementById("fItem").value.trim();
+  const qty = document.getElementById("fQty").value;
+  const comment = document.getElementById("fComment").value.trim();
+
+  if (!item || !selectedPoint || !selectedImg) {
+    showMsg("Fill in item name and tap on the image to mark location.", "error");
+    return;
+  }
+
+  const btn = document.getElementById("btnSave");
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+
+  const csvName = selectedImg.name.replace(/\.\w+$/, ".csv");
+  const path = `${user}/${csvName}`;
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+  const HEADER = "item,x,y,quantity,comment\n";
+  const newRow = `${item},${selectedPoint.x},${selectedPoint.y},${qty},${comment}`;
+
+  // GET existing (or create)
+  let sha = null, existing = HEADER;
+  const getRes = await fetch(url, { headers: authHeaders() });
+  if (getRes.ok) {
+    const d = await getRes.json();
+    sha = d.sha;
+    existing = atob(d.content);
+  }
+
+  const newCsv = existing.endsWith("\n") ? existing + newRow + "\n" : existing + "\n" + newRow + "\n";
+
+  const putRes = await fetch(url, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      message: `${user}: add item "${item}" to ${selectedImg.name}`,
+      content: btoa(newCsv),
+      branch: GH.branch,
+      ...(sha ? { sha } : {})
+    })
+  });
+
+  if (putRes.ok) {
+    showMsg(`✅ "${item}" saved at (${selectedPoint.x}, ${selectedPoint.y})`, "success");
+    document.getElementById("fItem").value = "";
+    document.getElementById("fQty").value = "";
+    document.getElementById("fComment").value = "";
+    selectedPoint = null;
+    document.getElementById("coordsText").textContent = "Tap on the image to mark an item location";
+    loadExistingItems();
+  } else {
+    const err = await putRes.json();
+    showMsg(`❌ ${err.message || "Save failed"}`, "error");
+  }
+  btn.disabled = false;
+  btn.textContent = "Save Item";
+}
+
+function showMsg(text, type) {
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = `msg ${type}`;
+}
+
+// ===== INIT =====
+loadImages();
+</script>
+</body>
+</html>   
