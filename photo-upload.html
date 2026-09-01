@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upload Photo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, sans-serif; background: #f5f5f5; padding: 16px; }
+  h2 { margin-bottom: 16px; font-size: 1.1rem; }
+  label { font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px; }
+  input[type="text"] {
+    width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 12px; font-size: 0.9rem;
+  }
+  .btn-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .btn-row button {
+    flex: 1; padding: 10px; border: none; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+  }
+  .btn-cam { background: #1a1a2e; color: #fff; }
+  .btn-gal { background: #e0e0e0; color: #333; }
+  .btn-upload {
+    width: 100%; padding: 12px; background: #43a047; color: #fff;
+    border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer; margin-top: 8px;
+  }
+  .btn-upload:disabled { opacity: 0.5; }
+  #preview { max-width: 100%; max-height: 200px; margin-bottom: 12px; border-radius: 8px; display: none; }
+  .msg { font-size: 0.85rem; margin-top: 10px; padding: 8px; border-radius: 6px; display: none; word-break: break-all; }
+  .msg.error { background: #ffebee; color: #c62828; display: block; }
+  .msg.success { background: #e8f5e9; color: #2e7d32; display: block; }
+  .back { display: inline-block; margin-bottom: 12px; font-size: 0.85rem; color: #1a1a2e; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<a class="back" href="/">← Back to Expenses</a>
+<h2>📷 Upload Receipt Photo</h2>
+
+<label>Image Name</label>
+<input type="text" id="phName" placeholder="e.g. rec_20260901_groceries" autocomplete="off">
+
+<label>Photo</label>
+<div class="btn-row">
+  <button class="btn-cam" onclick="document.getElementById('phCam').click()">📸 Camera</button>
+  <button class="btn-gal" onclick="document.getElementById('phGal').click()">🖼️ Gallery</button>
+</div>
+<input type="file" id="phCam" accept="image/*" capture="environment" style="display:none;">
+<input type="file" id="phGal" accept="image/*" style="display:none;">
+
+<img id="preview">
+
+<button class="btn-upload" id="btnUpload" onclick="doUpload()" disabled>Upload to Repo</button>
+<div class="msg" id="msg"></div>
+
+<script>
+const GH = { owner: "your-username", repo: "family-expenses-data", branch: "main" };
+let selectedFile = null;
+
+// Check auth (shared localStorage from main page)
+const token = localStorage.getItem("fe_token");
+const user = localStorage.getItem("fe_user");
+if (!token || !user) {
+  document.body.innerHTML = `<p style="text-align:center;margin-top:40px;"><a href="/">Please sign in first →</a></p>`;
+  throw new Error("Not authenticated");
+}
+
+function authHeaders() {
+  return {
+    "Authorization": `Bearer ${token}`,
+    "Accept": "application/vnd.github.v3+json",
+    "Content-Type": "application/json"
+  };
+}
+
+// File pickers
+document.getElementById("phCam").addEventListener("change", onFile);
+document.getElementById("phGal").addEventListener("change", onFile);
+document.getElementById("phName").addEventListener("input", updateBtn);
+
+function onFile(e) {
+  selectedFile = e.target.files[0];
+  if (!selectedFile) return;
+  const p = document.getElementById("preview");
+  p.src = URL.createObjectURL(selectedFile);
+  p.style.display = "block";
+  updateBtn();
+}
+
+function updateBtn() {
+  document.getElementById("btnUpload").disabled = !selectedFile || !document.getElementById("phName").value.trim();
+}
+
+function showMsg(text, type) {
+  const el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = `msg ${type}`;
+}
+
+async function doUpload() {
+  const name = document.getElementById("phName").value.trim();
+  if (!name || !selectedFile) return;
+
+  const btn = document.getElementById("btnUpload");
+  btn.disabled = true;
+
+  const ext = selectedFile.type.split("/")[1] || "jpg";
+  const filename = name.includes(".") ? name : `${name}.${ext}`;
+  const path = `${user}/${filename}`;
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+
+  // 1. Check if exists
+  btn.textContent = "Checking…";
+  const checkRes = await fetch(url, { headers: authHeaders() });
+  if (checkRes.ok) {
+    showMsg(`❌ "${filename}" already exists. Pick a different name.`, "error");
+    btn.disabled = false;
+    btn.textContent = "Upload to Repo";
+    return;
+  }
+
+  // 2. Compress
+  btn.textContent = "Compressing…";
+  const blob = await compress(selectedFile, 800);
+
+  // 3. Save locally (IndexedDB)
+  await saveLocal(path, blob);
+
+  // 4. Upload
+  btn.textContent = "Uploading…";
+  const b64 = await blobToBase64(blob);
+  const putRes = await fetch(url, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({ message: `${user}: ${filename}`, content: b64, branch: GH.branch })
+  });
+
+  if (putRes.ok) {
+    const raw = `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${path}`;
+    showMsg(`✅ Done! ${raw}`, "success");
+    document.getElementById("phName").value = "";
+    document.getElementById("preview").style.display = "none";
+    document.getElementById("phCam").value = "";
+    document.getElementById("phGal").value = "";
+    selectedFile = null;
+    btn.textContent = "Upload to Repo";
+  } else {
+    const err = await putRes.json();
+    showMsg(`❌ ${err.message || "Upload failed"}`, "error");
+    btn.textContent = "Upload to Repo";
+  }
+  btn.disabled = false;
+}
+
+// ===== Helpers =====
+function compress(file, maxW) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, maxW / img.width);
+      const c = document.createElement("canvas");
+      c.width = img.width * s;
+      c.height = img.height * s;
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(resolve, "image/jpeg", 0.7);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function blobToBase64(blob) {
+  return new Promise(resolve => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(",")[1]);
+    r.readAsDataURL(blob);
+  });
+}
+
+function saveLocal(key, blob) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("fe_photos", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("images");
+    req.onsuccess = () => {
+      const tx = req.result.transaction("images", "readwrite");
+      tx.objectStore("images").put(blob, key);
+      tx.oncomplete = resolve;
+      tx.onerror = reject;
+    };
+  });
+}
+</script>
+</body>
+</html>   
