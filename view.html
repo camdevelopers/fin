@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>View All Expenses</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 16px; }
+  h1 { font-size: 1.3rem; margin-bottom: 12px; }
+  .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .bar select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; }
+  .bar button { padding: 6px 14px; background: #1a1a2e; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.82rem; }
+  th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; }
+  th { background: #1a1a2e; color: #fff; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .val-neg { color: #e53935; }
+  .val-pos { color: #43a047; }
+  .file-link { font-size: 0.75rem; color: #1565c0; text-decoration: none; }
+  .balance-total { margin-top: 12px; font-size: 1rem; font-weight: 600; text-align: right; padding: 8px; }
+  .loading { text-align: center; padding: 40px; color: #666; }
+</style>
+</head>
+<body>
+
+<h1>📋 All Expenses</h1>
+<div class="bar">
+  <select id="userFilter">
+    <option value="">All Users</option>
+  </select>
+  <button onclick="load()">Refresh</button>
+  <a href="index.html" style="font-size:0.85rem;color:#1a1a2e;text-decoration:none;margin-left:auto;">← Back</a>
+</div>
+
+<div style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>User</th><th>Date</th><th>Type</th><th>Detail</th>
+        <th>Amount</th><th>Value</th><th>Receipt</th><th>File</th><th>Remarks</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
+  </table>
+</div>
+
+<div class="balance-total" id="balanceTotal"></div>
+
+<script>
+const GH = {
+  owner: "camdevelopers",
+  repo: "storesoffinancialstoresatrandomrepoandstuffvariablesvariedforever",
+  branch: "main"
+};
+const SEP = "|";
+
+let allRows = [];
+
+function authHeaders() {
+  return {
+    "Authorization": `Bearer ${localStorage.getItem("fe_token")}`,
+    "Accept": "application/vnd.github.v3+json"
+  };
+}
+
+async function load() {
+  const tbody = document.getElementById("tbody");
+  tbody.innerHTML = '<tr><td colspan="10" class="loading">Loading…</td></tr>';
+
+  const token = localStorage.getItem("fe_token");
+  if (!token) { alert("Please sign in first."); location.href = "index.html"; return; }
+
+  // List all files in repo root
+  const res = await fetch(
+    `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/`,
+    { headers: authHeaders() }
+  );
+  if (!res.ok) { tbody.innerHTML = '<tr><td colspan="10">Failed to list files.</td></tr>'; return; }
+
+  const files = (await res.json()).filter(f => f.name.endsWith(".csv"));
+  allRows = [];
+
+  for (const file of files) {
+    const user = file.name.replace(".csv", "");
+    const r = await fetch(file.url, { headers: authHeaders() });
+    if (!r.ok) continue;
+    const data = await r.json();
+    const csv = atob(data.content);
+    const lines = csv.trim().split("\n").slice(1);
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const parts = line.split(SEP);
+      allRows.push({
+        user: parts[0],
+        type: +parts[1],
+        date: parts[2],
+        detail: parts[3],
+        amount: +parts[4],
+        value: +parts[5],
+        receipt: parts[6] || "YES",
+        file: parts[7] || "",
+        remarks: parts[8] || ""
+      });
+    }
+  }
+
+  // Populate user filter
+  const sel = document.getElementById("userFilter");
+  const current = sel.value;
+  const users = [...new Set(allRows.map(r => r.user))].sort();
+  sel.innerHTML = '<option value="">All Users</option>' + users.map(u => `<option value="${u}">${u}</option>`).join("");
+  if (users.includes(current)) sel.value = current;
+
+  render();
+}
+
+function render() {
+  const filter = document.getElementById("userFilter").value;
+  let rows = filter ? allRows.filter(r => r.user === filter) : [...allRows];
+
+  // Sort oldest → latest
+  rows.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  const tbody = document.getElementById("tbody");
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;">No entries.</td></tr>';
+    document.getElementById("balanceTotal").textContent = "";
+    return;
+  }
+
+  tbody.innerHTML = rows.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${r.user}</td>
+      <td>${r.date || "—"}</td>
+      <td>${r.type}</td>
+      <td>${r.detail || "—"}</td>
+      <td>${r.amount.toFixed(2)}</td>
+      <td class="${r.value < 0 ? 'val-neg' : 'val-pos'}">${r.value >= 0 ? '+' : ''}${r.value.toFixed(2)}</td>
+      <td>${r.receipt}</td>
+      <td>${r.file ? `<a class="file-link" href="${r.file}" target="_blank">📎 view</a>` : "—"}</td>
+      <td>${r.remarks || "—"}</td>
+    </tr>
+  `).join("");
+
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  document.getElementById("balanceTotal").textContent =
+    `Total (${rows.length} entries): ${total >= 0 ? '+' : ''}${total.toFixed(2)}`;
+}
+
+document.getElementById("userFilter").addEventListener("change", render);
+load();
+</script>
+</body>
+</html>   
