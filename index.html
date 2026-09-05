@@ -464,7 +464,8 @@ function render() {
       <td class="${r.value < 0 ? 'val-neg' : 'val-pos'}">${r.value >= 0 ? '+' : ''}${r.value.toFixed(2)}</td>
       <td>${r.balance.toFixed(2)}</td>
       <td>${r.receipt}</td>
-      <td>${r.file ? `<a class="file-link" href="${r.file}" target="_blank" download>📎 view</a>` : "—"}</td>
+      <!-- <td>${r.file ? `<a class="file-link" href="${r.file}" target="_blank" download>📎 view</a>` : "—"}</td> -->
+      <td>${r.file ? `<a class="file-link" href="#" onclick="viewFile('${r.file}');return false;">📎 view</a>` : "—"}</td>
       <td>${r.remarks || "—"}</td>
     </tr>
   `).join("");
@@ -543,6 +544,28 @@ function showToast(msg) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3000);
 }
+
+ async function viewFile(url) {
+  const path = url.replace(`https://github.com/${GH.owner}/${GH.repo}/blob/${GH.branch}/`, "");
+  const apiPath = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+
+  const res = await fetch(apiPath, { headers: authHeaders() });
+  if (!res.ok) { alert("Failed to load file."); return; }
+
+  const data = await res.json();
+  const binary = atob(data.content);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  const ext = path.split(".").pop().toLowerCase();
+  const mime = ext === "pdf" ? "application/pdf" : `image/${ext === "jpg" ? "jpeg" : ext}`;
+  const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+
+  window.open(blobUrl, "_blank");
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+}   
+
+ 
 </script>
 </body>
 </html>   
