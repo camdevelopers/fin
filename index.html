@@ -477,7 +477,9 @@ async function addRow() {
   const type = parseInt(document.getElementById("fType").value);
   const detail = document.getElementById("fDetail").value.trim();
   const amount = parseFloat(document.getElementById("fAmount").value);
-  const date = document.getElementById("fDate").value;
+  //const date = document.getElementById("fDate").value;
+  const _d = new Date();
+  document.getElementById("fDate").value = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,"0")}-${String(_d.getDate()).padStart(2,"0")}`;   
   const receipt = document.getElementById("fReceipt").value;
   const remarks = document.getElementById("fRemarks").value.trim();
   const fileInput = document.getElementById("fFile");
