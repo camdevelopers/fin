@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>Trust Expenses v12</title>
+<title>Trust Expenses v13</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 16px; }
@@ -545,7 +545,7 @@ function showToast(msg) {
   setTimeout(() => t.remove(), 3000);
 }
 
- async function viewFile(url) {
+ async function viewFile_old_CANBEDELETED(url) {
   const path = url.replace(`https://github.com/${GH.owner}/${GH.repo}/blob/${GH.branch}/`, "");
   const apiPath = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`;
 
@@ -565,6 +565,24 @@ function showToast(msg) {
   setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 }   
 
+ async function viewFile(url) {
+  const path = url.replace(`https://github.com/${GH.owner}/${GH.repo}/blob/${GH.branch}/`, "");
+  const apiPath = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+
+  const res = await fetch(apiPath, {
+    headers: {
+      ...authHeaders(),
+      "Accept": "application/vnd.github.v3.raw"
+    }
+  });
+  if (!res.ok) { alert("Failed to load file."); return; }
+
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+
+  window.open(blobUrl, "_blank");
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+}   
  
 </script>
 </body>
