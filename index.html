@@ -314,7 +314,9 @@ async function uploadFile(file) {
     throw new Error(err.message || "File upload failed");
   }
 
-  return `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${path}`;
+  //return `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${path}`;
+ return `https://github.com/${GH.owner}/${GH.repo}/blob/${GH.branch}/${path}`;
+
 }
 
 // ===== FULL SYNC =====
