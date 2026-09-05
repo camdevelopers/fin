@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>Trust Expenses v8</title>
+<title>Trust Expenses v9</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 16px; }
@@ -154,6 +154,8 @@
 </div>
 
 <script>
+ const _d1 = new Date();
+ document.getElementById("fDate").value = `${_d1.getFullYear()}-${String(_d1.getMonth()+1).padStart(2,"0")}-${String(_d1.getDate()).padStart(2,"0")}`;   
 // ===== CONFIG =====
 const GH = {
   owner: "camdevelopers",
@@ -497,6 +499,9 @@ async function addRow() {
       alert("File upload failed: " + e.message);
       return;
     }
+
+   const _d = new Date();
+   document.getElementById("fDate").value = `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,"0")}-${String(_d.getDate()).padStart(2,"0")}`;   
   }
 
   rows.push({
