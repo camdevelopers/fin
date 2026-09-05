@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Expenses">
+<meta name="theme-color" content="#1a1a2e">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Trust Expenses</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 16px; }
+  h1 { font-size: 1.3rem; margin-bottom: 12px; }
+
+  #signin {
+    position: fixed; inset: 0; background: #1a1a2e;
+    display: flex; align-items: center; justify-content: center; z-index: 999;
+  }
+  #signin .card {
+    background: #fff; padding: 32px; border-radius: 12px;
+    width: 90%; max-width: 340px; text-align: center;
+  }
+  #signin h2 { margin-bottom: 8px; }
+  #signin p { font-size: 0.85rem; color: #666; margin-bottom: 20px; }
+  #signin label { font-size: 0.8rem; font-weight: 600; display: block; text-align: left; margin-bottom: 4px; }
+  #signin input {
+    width: 100%; padding: 10px; border: 1px solid #ddd;
+    border-radius: 6px; margin-bottom: 12px; font-size: 0.9rem;
+  }
+  #signin button {
+    width: 100%; padding: 12px; background: #1a1a2e; color: #fff;
+    border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+  }
+  #signin button:disabled { opacity: 0.5; }
+  #signin .error { color: #e53935; font-size: 0.8rem; margin-top: 8px; display: none; }
+
+  #app { display: none; }
+  .user-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; font-size: 0.9rem; }
+  .user-bar span { font-weight: 600; }
+  .user-bar button { padding: 4px 10px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; font-size: 0.8rem; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.82rem; }
+  th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #eee; }
+  th { background: #1a1a2e; color: #fff; font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  .val-neg { color: #e53935; }
+  .val-pos { color: #43a047; }
+  .form { margin-top: 16px; background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .form h2 { font-size: 1rem; margin-bottom: 12px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .form-row.full { grid-template-columns: 1fr; }
+  .form label { font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px; }
+  .form input, .form select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem; }
+  .form button.add { width: 100%; padding: 10px; background: #1a1a2e; color: #fff; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer; margin-top: 4px; }
+  .balance-total { margin-top: 12px; font-size: 1rem; font-weight: 600; text-align: right; padding: 8px; }
+  .file-link { font-size: 0.75rem; color: #1565c0; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<!-- ===== SIGN-IN SCREEN ===== -->
+<div id="signin">
+  <div class="card">
+    <h2>🔑 Sign In</h2>
+    <p>Enter your name and the shared token</p>
+    <label>Username</label>
+    <input id="inUser" type="text" placeholder="e.g. user" autocomplete="off">
+    <label>GitHub Token</label>
+    <input id="inToken" type="password" placeholder="github_pat_..." autocomplete="off">
+    <button id="btnSignIn" onclick="doSignIn()">Sign In</button>
+    <div class="error" id="signinError"></div>
+  </div>
+</div>
+
+<!-- ===== MAIN APP ===== -->
+<div id="app">
+  <h1>📊 Trust Expenses</h1>
+  <div class="user-bar">
+    <span id="currentUserLabel"></span>
+    <button onclick="signOut()">Sign Out</button>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Date</th><th>Type</th><th>Detail</th><th>Amount</th>
+          <th>Value</th><th>Balance</th><th>Receipt</th><th>File</th><th>Remarks</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="balance-total" id="balanceTotal"></div>
+
+  <div class="form">
+    <h2>Add Entry</h2>
+    <div class="form-row">
+      <div>
+        <label>Type</label>
+        <select id="fType">
+          <option value="1">1 – Expense</option>
+          <option value="2">2 – Employee Expense</option>
+          <option value="3">3 – Petty Cash Received</option>
+          <option value="4">4 – Reimbursed</option>
+        </select>
+      </div>
+      <div>
+        <label>Amount (₹)</label>
+        <input type="number" id="fAmount" min="0" step="0.01" placeholder="0.00">
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>Date</label>
+        <input type="date" id="fDate">
+      </div>
+      <div>
+        <label>Receipt</label>
+        <select id="fReceipt">
+          <option value="YES" selected>YES</option>
+          <option value="NO">NO</option>
+          <option value="CARBON">CARBON</option>
+          <option value="VOUCHER">VOUCHER</option>
+          <option value="PAPER">PAPER</option>
+          <option value="OTHER">OTHER</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row full">
+      <div>
+        <label>Detail</label>
+        <input type="text" id="fDetail" placeholder="e.g. Groceries, Fuel, Salary…">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div>
+        <label>Remarks</label>
+        <input type="text" id="fRemarks" placeholder="Optional notes…">
+      </div>
+    </div>
+    <div class="form-row full">
+      <div>
+        <label>File (photo / document)</label>
+        <input type="file" id="fFile" accept="image/*,.pdf" capture="environment" style="font-size:0.8rem;">
+      </div>
+    </div>
+    <button class="add" onclick="addRow()">+ Add Row</button>
+  </div>
+</div>
+
+<script>
+// ===== CONFIG =====
+const GH = {
+  owner: "camdevelopers",
+  repo: "storesoffinancialstoresatrandomrepoandstuffvariablesvariedforever",
+  branch: "main"
+};
+const SEP = "|";
+const HEADER = "user|type|date|detail|amount|value|receipt|file|remarks\n";
+
+// ===== STATE =====
+let currentUser = null;
+let rows = [];
+
+// ===== INIT =====
+(function init() {
+  const token = localStorage.getItem("fe_token");
+  const user = localStorage.getItem("fe_user");
+  if (!token || !user) return;
+
+  verifyToken(token).then(status => {
+    if (status === "ok") {
+      currentUser = user;
+      showApp();
+      fullSync();
+    } else if (status === "invalid") {
+      localStorage.removeItem("fe_token");
+      localStorage.removeItem("fe_user");
+      showSignInError("Token expired or invalid. Please sign in again.");
+    } else {
+      currentUser = user;
+      showApp();
+      showToast("⚠️ Offline — will sync when connected");
+      render();
+    }
+  });
+
+  document.getElementById("fDate").valueAsDate = new Date();
+})();
+
+// ===== SIGN IN / OUT =====
+function doSignIn() {
+  const user = document.getElementById("inUser").value.trim().toLowerCase();
+  const token = document.getElementById("inToken").value.trim();
+
+  if (!user) return showSignInError("Enter a username.");
+  if (!token.startsWith("github_pat_")) return showSignInError("That doesn't look like a valid token.");
+
+  const btn = document.getElementById("btnSignIn");
+  btn.disabled = true;
+  btn.textContent = "Signing in…";
+
+  verifyToken(token).then(ok => {
+    if (!ok) {
+      showSignInError("Invalid token. Check and try again.");
+      btn.disabled = false;
+      btn.textContent = "Sign In";
+      return;
+    }
+
+    localStorage.setItem("fe_token", token);
+    localStorage.setItem("fe_user", user);
+    currentUser = user;
+
+    ensureFile(user).then(() => {
+      document.getElementById("signin").style.display = "none";
+      showApp();
+      fullSync();
+    }).catch(err => {
+      showSignInError("Failed to create your file: " + err.message);
+      btn.disabled = false;
+      btn.textContent = "Sign In";
+    });
+  });
+}
+
+function signOut() {
+  localStorage.removeItem("fe_token");
+  localStorage.removeItem("fe_user");
+  location.reload();
+}
+
+function showSignInError(msg) {
+  const el = document.getElementById("signinError");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+// ===== TOKEN VERIFICATION =====
+async function verifyToken(token) {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH.owner}/${GH.repo}`,
+      { headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github.v3+json" } }
+    );
+    if (res.status === 401 || res.status === 403) return "invalid";
+    return "ok";
+  } catch {
+    return "offline";
+  }
+}
+
+function authHeaders() {
+  return {
+    "Authorization": `Bearer ${localStorage.getItem("fe_token")}`,
+    "Accept": "application/vnd.github.v3+json",
+    "Content-Type": "application/json"
+  };
+}
+
+// ===== ENSURE USER FILE EXISTS =====
+async function ensureFile(user) {
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${user}.csv`;
+  const res = await fetch(url, { headers: authHeaders() });
+  if (res.ok) return;
+
+  const createRes = await fetch(url, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      message: `Create ${user}.csv`,
+      content: btoa(HEADER),
+      branch: GH.branch
+    })
+  });
+  if (!createRes.ok) {
+    const err = await createRes.json();
+    throw new Error(err.message || "Failed to create file");
+  }
+}
+
+// ===== FILE UPLOAD TO GITHUB =====
+async function uploadFile(file) {
+  const fileName = `${currentUser}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
+  const path = `uploads/${fileName}`;
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${path}`;
+
+  const base64 = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      message: `Upload ${fileName}`,
+      content: base64,
+      branch: GH.branch
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || "File upload failed");
+  }
+
+  return `https://raw.githubusercontent.com/${GH.owner}/${GH.repo}/${GH.branch}/${path}`;
+}
+
+// ===== FULL SYNC =====
+async function fullSync() {
+  await pullOthers();
+  await pushSelf();
+  render();
+}
+
+// ===== PULL =====
+async function pullOthers() {
+  const shas = JSON.parse(localStorage.getItem("fe_shas") || "{}");
+  const newShas = { ...shas };
+
+  for (const user of Object.keys(shas).concat(currentUser)) {
+    if (user === currentUser) continue;
+    if (!user) continue;
+
+    const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${user}.csv`;
+    const headers = authHeaders();
+    if (shas[user]) headers["If-None-Match"] = shas[user];
+
+    const res = await fetch(url, { headers });
+    if (res.status === 404) continue;
+    if (res.status === 304) continue;
+
+    const data = await res.json();
+    newShas[user] = data.sha;
+
+    const csv = atob(data.content);
+    const remoteRows = parseCsv(csv, user);
+    rows = rows.filter(r => r.user !== user).concat(remoteRows);
+  }
+
+  await pullSelf();
+  localStorage.setItem("fe_shas", JSON.stringify(newShas));
+}
+
+async function pullSelf() {
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${currentUser}.csv`;
+  const res = await fetch(url, { headers: authHeaders() });
+  if (!res.ok) return;
+
+  const data = await res.json();
+  const csv = atob(data.content);
+  const remoteRows = parseCsv(csv, currentUser);
+
+  const localPending = rows.filter(r => r.user === currentUser && r.synced === 0);
+  rows = rows.filter(r => r.user !== currentUser).concat(remoteRows, localPending);
+}
+
+// ===== PUSH =====
+async function pushSelf() {
+  const pending = rows.filter(r => r.user === currentUser && r.synced === 0);
+  if (!pending.length) return;
+
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${currentUser}.csv`;
+
+  for (const row of pending) {
+    let attempts = 0;
+    while (attempts < 3) {
+      attempts++;
+
+      const getRes = await fetch(url, { headers: authHeaders() });
+      let sha = null, existing = HEADER;
+      if (getRes.ok) {
+        const d = await getRes.json();
+        sha = d.sha;
+        existing = atob(d.content);
+      }
+
+      const newLine = [row.user, row.type, row.date, row.detail, row.amount, row.value, row.receipt, row.file || "", row.remarks || ""].join(SEP);
+      const newCsv = existing.endsWith("\n") ? existing + newLine + "\n" : existing + "\n" + newLine + "\n";
+
+      const putRes = await fetch(url, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          message: `${row.user}: ${row.detail} (${row.amount})`,
+          content: btoa(newCsv),
+          branch: GH.branch,
+          ...(sha ? { sha } : {})
+        })
+      });
+
+      if (putRes.ok) { row.synced = 1; break; }
+      if (putRes.status === 409) continue;
+      console.error("Push failed:", await putRes.text());
+      break;
+    }
+  }
+}
+
+// ===== CSV PARSER (pipe-separated) =====
+function parseCsv(csv, user) {
+  const lines = csv.trim().split("\n").slice(1);
+  return lines.filter(l => l.trim()).map((line, i) => {
+    const parts = line.split(SEP);
+    return {
+      id: `${user}-${i}-${parts[4]}`,
+      user: parts[0],
+      type: +parts[1],
+      date: parts[2],
+      detail: parts[3],
+      amount: +parts[4],
+      value: +parts[5],
+      receipt: parts[6] || "YES",
+      file: parts[7] || "",
+      remarks: parts[8] || "",
+      synced: 1
+    };
+  });
+}
+
+// ===== COMPUTE =====
+function computeValue(type, amount) {
+  return (type === 1 || type === 2) ? -amount : amount;
+}
+
+function runningBalance(userRows) {
+  let bal = 0;
+  return userRows.map(r => ({ ...r, balance: (bal += r.value) }));
+}
+
+// ===== RENDER =====
+function showApp() {
+  document.getElementById("signin").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  document.getElementById("currentUserLabel").textContent = currentUser;
+}
+
+function render() {
+  const myRows = runningBalance(rows.filter(r => r.user === currentUser));
+  const tbody = document.getElementById("tbody");
+
+  tbody.innerHTML = myRows.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${r.date || "—"}</td>
+      <td>${r.type}</td>
+      <td>${r.detail || "—"}</td>
+      <td>${r.amount.toFixed(2)}</td>
+      <td class="${r.value < 0 ? 'val-neg' : 'val-pos'}">${r.value >= 0 ? '+' : ''}${r.value.toFixed(2)}</td>
+      <td>${r.balance.toFixed(2)}</td>
+      <td>${r.receipt}</td>
+      <td>${r.file ? `<a class="file-link" href="${r.file}" target="_blank" download>📎 view</a>` : "—"}</td>
+      <td>${r.remarks || "—"}</td>
+    </tr>
+  `).join("");
+
+  const total = myRows.length ? myRows[myRows.length - 1].balance : 0;
+  document.getElementById("balanceTotal").textContent =
+    `Total Balance: ${total >= 0 ? '+' : ''}${total.toFixed(2)}`;
+}
+
+// ===== ADD ROW =====
+async function addRow() {
+  const type = parseInt(document.getElementById("fType").value);
+  const detail = document.getElementById("fDetail").value.trim();
+  const amount = parseFloat(document.getElementById("fAmount").value);
+  const date = document.getElementById("fDate").value;
+  const receipt = document.getElementById("fReceipt").value;
+  const remarks = document.getElementById("fRemarks").value.trim();
+  const fileInput = document.getElementById("fFile");
+
+  if (isNaN(amount) || amount <= 0) { alert("Enter a valid amount."); return; }
+  if (type !== 3 && type !== 4 && !detail) { alert("Enter a detail."); return; }
+
+  let fileUrl = "";
+  if (fileInput.files.length > 0) {
+    try {
+      showToast("⏳ Uploading file…");
+      fileUrl = await uploadFile(fileInput.files[0]);
+    } catch (e) {
+      alert("File upload failed: " + e.message);
+      return;
+    }
+  }
+
+  rows.push({
+    id: `${currentUser}-${Date.now()}`,
+    user: currentUser,
+    type,
+    date,
+    detail,
+    amount,
+    value: computeValue(type, amount),
+    receipt,
+    file: fileUrl,
+    remarks,
+    synced: 0
+  });
+
+  document.getElementById("fDetail").value = "";
+  document.getElementById("fAmount").value = "";
+  document.getElementById("fRemarks").value = "";
+  fileInput.value = "";
+  document.getElementById("fReceipt").value = "YES";
+  document.getElementById("fDate").valueAsDate = new Date();
+
+  render();
+  pushSelf().then(render);
+}
+
+// ===== AUTO-SYNC =====
+window.addEventListener("online", () => { if (currentUser) fullSync(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && currentUser) fullSync();
+});
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.createElement("div");
+  t.textContent = msg;
+  t.style.cssText = "position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:6px;font-size:0.85rem;z-index:9999;";
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+</script>
+</body>
+</html>   
