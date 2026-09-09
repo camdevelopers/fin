@@ -532,6 +532,21 @@ async function pullOthers() {
   localStorage.setItem("fe_shas", JSON.stringify(newShas));
 }
 
+ // ===== PULL SELF =====
+ async function pullSelf() {
+  const fileName = getFileName(currentUser, currentMonth);
+  const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${fileName}`;
+  const res = await fetch(url, { headers: authHeaders() });
+  if (!res.ok) return;
+
+  const data = await res.json();
+  const csv = atob(data.content);
+  const remoteRows = parseCsv(csv, currentUser);
+
+  const localPending = rows.filter(r => r.user === currentUser && r.synced === 0);
+  rows = rows.filter(r => r.user !== currentUser).concat(remoteRows, localPending);
+}   
+
 // ===== PUSH SELF (append new rows) =====
 async function pushSelf() {
   const pending = rows.filter(r => r.user === currentUser && (r.synced === 0 || r.synced === 2));
