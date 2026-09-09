@@ -255,31 +255,36 @@ function todayStr() {
 
 // ===== INIT =====
 (function init() {
+  // Restore local state first (instant offline load)
+  const savedRows = localStorage.getItem("fe_rows");
+  const savedMonth = localStorage.getItem("fe_month");
+  if (savedRows) rows = JSON.parse(savedRows);
+  if (savedMonth) currentMonth = savedMonth;
+
   const token = localStorage.getItem("fe_token");
   const user = localStorage.getItem("fe_user");
   if (!token || !user) return;
 
+  currentUser = user;
+  showApp();
+  render(); // Instant render from local data
+  updateOfflineBanner();
+
+  // Then sync if network available
   verifyToken(token).then(status => {
     if (status === "ok") {
-      currentUser = user;
-      currentMonth = getCurrentMonth();
-      showApp();
       fullSync();
     } else if (status === "invalid") {
       localStorage.removeItem("fe_token");
       localStorage.removeItem("fe_user");
-      showSignInError("Token expired or invalid. Please sign in again.");
+      location.reload();
     } else {
-      currentUser = user;
-      currentMonth = getCurrentMonth();
-      showApp();
-      showToast("⚠️ Offline — will sync when connected");
-      render();
+      // Offline — already rendered from local state
     }
   });
 
   document.getElementById("fDate").value = todayStr();
-})();
+})();   
 
 // ===== SIGN IN / OUT =====
 function doSignIn() {
