@@ -880,10 +880,19 @@ function resetForm() {
 }
 
 // ===== AUTO-SYNC =====
-window.addEventListener("online", () => { if (currentUser) fullSync(); });
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && currentUser) fullSync();
+window.addEventListener("online", () => {
+  updateOfflineBanner();
+  if (currentUser) fullSync();
 });
+window.addEventListener("offline", () => {
+  updateOfflineBanner();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && currentUser) {
+    if (navigator.onLine) fullSync();
+    else updateOfflineBanner();
+  }
+});   
 
 // ===== TOAST =====
 function showToast(msg) {
