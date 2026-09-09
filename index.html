@@ -605,8 +605,7 @@ async function rewriteSelfCsv(commitMsg) {
       const d = await getRes.json();
       sha = d.sha;
     }
-
-    // Rebuild CSV from local rows (only current user, current month)
+    // ===== REWRITE ENTIRE CSV (for edit & delete) =====
     const myRows = rows.filter(r => r.user === currentUser);
     let newCsv = HEADER;
     for (const r of myRows) {
@@ -626,14 +625,20 @@ async function rewriteSelfCsv(commitMsg) {
 
     if (putRes.ok) {
       myRows.forEach(r => r.synced = 1);
+      saveState();
       return true;
     }
     if (putRes.status === 409) continue;
     console.error("Rewrite failed:", await putRes.text());
+    myRows.forEach(r => r.synced = 2);
+    saveState();
     return false;
   }
+
+  myRows.forEach(r => r.synced = 2);
+  saveState();
   return false;
-}
+}   
 
 // ===== CSV PARSER =====
 function parseCsv(csv, user) {
