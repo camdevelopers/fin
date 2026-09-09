@@ -87,7 +87,7 @@ body.offline { padding-top: 36px; }
 </style>
 </head>
 <body>
-
+<div id="offlineBanner">📡 Offline — <span id="pendingCount">0</span> changes queued</div>   
 <!-- ===== SIGN-IN SCREEN ===== -->
 <div id="signin">
   <div class="card">
@@ -194,6 +194,10 @@ body.offline { padding-top: 36px; }
 <a href="view.html" style="font-size:0.85rem;color:#1a1a2e;text-decoration:none;">📋 View Transactions</a>
 
 <script>
+ // ===== SERVICE WORKER =====
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
 // ===== CONFIG =====
 const GH = {
   owner: "camdevelopers",
