@@ -253,6 +253,27 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
+ // ===== PERSIST LOCAL STATE =====
+function saveState() {
+  localStorage.setItem("fe_rows", JSON.stringify(rows));
+  localStorage.setItem("fe_month", currentMonth);
+  updateOfflineBanner();
+}
+
+function updateOfflineBanner() {
+  const banner = document.getElementById("offlineBanner");
+  const pending = rows.filter(r => r.user === currentUser && r.synced === 0).length;
+  const isOffline = !navigator.onLine;
+
+  if (isOffline && pending > 0) {
+    document.getElementById("pendingCount").textContent = pending;
+    banner.style.display = "block";
+    document.body.classList.add("offline");
+  } else {
+    banner.style.display = "none";
+    document.body.classList.remove("offline");
+  }
+}   
 // ===== INIT =====
 (function init() {
   // Restore local state first (instant offline load)
