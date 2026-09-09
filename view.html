@@ -93,7 +93,7 @@ async function load() {
       const parts = line.split(SEP);
       allRows.push({
         user: parts[0],
-        type: +parts[1],
+        type: parts[1],
         date: parts[2],
         detail: parts[3],
         amount: +parts[4],
