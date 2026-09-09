@@ -27,7 +27,7 @@ self.addEventListener("fetch", e => {
       return res;
     }).catch(() =>
       // Offline: serve from cache
-      caches.match(e.request).then(cached => cached || caches.match("/index.html"))
+      caches.match(e.request).then(cached => cached || caches.match("./index.html"))   
     )
   );
 });
