@@ -720,6 +720,7 @@ async function switchMonth(month) {
   if (editingId) cancelEdit();
 
   currentMonth = month;
+  localStorage.setItem("fe_month", currentMonth);   
   showToast(`⏳ Loading ${monthLabel(month)}…`);
 
   // Ensure this month's file exists
@@ -773,6 +774,7 @@ async function deleteRow(id) {
   if (!confirm(`Delete "${row.detail || TYPE_LABELS[row.type] || 'entry'}" (${row.amount})?`)) return;
 
   rows = rows.filter(r => r.id !== id);
+  saveState();   
   if (editingId === id) cancelEdit();
   render();
 
@@ -851,7 +853,7 @@ async function addRow() {
     remarks,
     synced: 0
   });
-
+  saveState();   
   resetForm();
   render();
   pushSelf().then(render);
