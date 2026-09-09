@@ -482,23 +482,23 @@ async function uploadFile(file) {
 
 // ===== FULL SYNC =====
 async function fullSync() {
-  // List available months for current user
   availableMonths = await listUserMonths(currentUser);
-
-  // Ensure current month file exists
   await ensureFile(currentUser, currentMonth);
 
-  // Pull other users
-  await pullOthers();
+  // ← NEW: flush pending rewrite (edit/delete) BEFORE pulling
+  if (localStorage.getItem("fe_pending_rewrite") === "1") {
+    showToast("⏳ Syncing pending changes…");
+    const ok = await rewriteSelfCsv(`${currentUser}: offline sync [${currentMonth}]`);
+    if (ok) showToast("✅ Pending changes synced");
+  }
 
-  // Push self (includes pending AND failed rows)
+  await pullOthers();
   await pushSelf();
 
-  // Render month selector + table
   renderMonthSelector();
   render();
   saveState();
-}   
+}     
 
 // ===== PULL OTHERS =====
 async function pullOthers() {
@@ -602,46 +602,67 @@ async function rewriteSelfCsv(commitMsg) {
   while (attempts < 3) {
     attempts++;
 
-    const getRes = await fetch(url, { headers: authHeaders() });
     let sha = null;
-    if (getRes.ok) {
-      const d = await getRes.json();
-      sha = d.sha;
+    try {
+      const getRes = await fetch(url, { headers: authHeaders() });
+      if (getRes.ok) {
+        const d = await getRes.json();
+        sha = d.sha;
+      }
+    } catch (e) {
+      // Network offline — mark and bail
+      rows.filter(r => r.user === currentUser).forEach(r => r.synced = 2);
+      localStorage.setItem("fe_pending_rewrite", "1");
+      saveState();
+      return false;
     }
-    // ===== REWRITE ENTIRE CSV (for edit & delete) =====
+
     const myRows = rows.filter(r => r.user === currentUser);
     let newCsv = HEADER;
     for (const r of myRows) {
       newCsv += [r.user, r.type, r.date, r.detail, r.amount, r.value, r.receipt, r.file || "", r.remarks || ""].join(SEP) + "\n";
     }
 
-    const putRes = await fetch(url, {
-      method: "PUT",
-      headers: authHeaders(),
-      body: JSON.stringify({
-        message: commitMsg || `${currentUser}: update ${currentMonth}`,
-        content: btoa(newCsv),
-        branch: GH.branch,
-        ...(sha ? { sha } : {})
-      })
-    });
+    let putRes;
+    try {
+      putRes = await fetch(url, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          message: commitMsg || `${currentUser}: update ${currentMonth}`,
+          content: btoa(newCsv),
+          branch: GH.branch,
+          ...(sha ? { sha } : {})
+        })
+      });
+    } catch (e) {
+      // Network dropped mid-push
+      rows.filter(r => r.user === currentUser).forEach(r => r.synced = 2);
+      localStorage.setItem("fe_pending_rewrite", "1");
+      saveState();
+      return false;
+    }
 
     if (putRes.ok) {
       myRows.forEach(r => r.synced = 1);
+      localStorage.removeItem("fe_pending_rewrite");
       saveState();
       return true;
     }
     if (putRes.status === 409) continue;
     console.error("Rewrite failed:", await putRes.text());
     myRows.forEach(r => r.synced = 2);
+    localStorage.setItem("fe_pending_rewrite", "1");
     saveState();
     return false;
   }
 
-  myRows.forEach(r => r.synced = 2);
+  rows.filter(r => r.user === currentUser).forEach(r => r.synced = 2);
+  localStorage.setItem("fe_pending_rewrite", "1");
   saveState();
   return false;
 }   
+
 
 // ===== CSV PARSER =====
 function parseCsv(csv, user) {
