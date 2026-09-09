@@ -820,7 +820,7 @@ async function addRow() {
         row.file = await uploadFile(fileInput.files[0]);
       } catch (e) { alert("File upload failed: " + e.message); return; }
     }
-   
+    saveState();
     render();
     showToast("⏳ Saving…");
     const ok = await rewriteSelfCsv(`${currentUser}: edit ${detail} [${currentMonth}]`);
