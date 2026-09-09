@@ -697,7 +697,7 @@ function render() {
     const valClass = r.value < 0 ? 'val-neg' : r.value > 0 ? 'val-pos' : 'val-zero';
     return `
     <tr class="${editingId === r.id ? 'editing' : ''} ${isBF ? 'bf-row' : ''}">
-      <td>${i + 1}</td>
+      <td>${i + 1}${r.synced === 0 ? ' <span style="color:#f57c00;font-size:0.7rem;">⏳</span>' : ''}</td>
       <td>${r.date || "—"}</td>
       <td>${TYPE_LABELS[r.type] || r.type}</td>
       <td>${r.detail || "—"}</td>
@@ -825,7 +825,7 @@ async function addRow() {
         row.file = await uploadFile(fileInput.files[0]);
       } catch (e) { alert("File upload failed: " + e.message); return; }
     }
-
+   
     render();
     showToast("⏳ Saving…");
     const ok = await rewriteSelfCsv(`${currentUser}: edit ${detail} [${currentMonth}]`);
