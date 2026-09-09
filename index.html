@@ -608,7 +608,7 @@ async function deleteRow(id) {
 
 // ===== ADD / SAVE ROW =====
 async function addRow() {
-  const type = parseInt(document.getElementById("fType").value);
+  const type = document.getElementById("fType").value;
   const detail = document.getElementById("fDetail").value.trim();
   const amount = parseFloat(document.getElementById("fAmount").value);
   const date = document.getElementById("fDate").value;
