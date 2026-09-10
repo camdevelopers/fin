@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backup</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; }
+  h1 { font-size: 1.2rem; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 480px; }
+  .card p { font-size: 0.85rem; color: #555; margin-bottom: 16px; }
+  button {
+    width: 100%; padding: 12px; background: #1a1a2e; color: #fff;
+    border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600;
+    cursor: pointer; margin-bottom: 10px;
+  }
+  button:disabled { opacity: 0.5; }
+  .status { font-size: 0.8rem; color: #666; margin-top: 8px; min-height: 1.2em; }
+  .error { color: #e53935; }
+  .file-list { font-size: 0.78rem; color: #444; margin-top: 12px; max-height: 200px; overflow-y: auto; }
+  .file-list div { padding: 3px 0; border-bottom: 1px solid #eee; }
+  a { font-size: 0.85rem; color: #1a1a2e; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📦 Backup CSV Files</h1>
+  <p>Downloads all <code>.csv</code> files from the repo as a single ZIP.</p>
+  <button id="btnBackup" onclick="doBackup()">⬇️ Download Backup (.zip)</button>
+  <div class="status" id="status"></div>
+  <div class="file-list" id="fileList"></div>
+  <br>
+  <a href="index.html">← Back to app</a>
+</div>
+
+<script>
+const GH = {
+  owner: "camdevelopers",
+  repo: "storesoffinancialstoresatrandomrepoandstuffvariablesvariedforever",
+  branch: "main"
+};
+
+function authHeaders() {
+  return {
+    "Authorization": `Bearer ${localStorage.getItem("fe_token")}`,
+    "Accept": "application/vnd.github.v3+json"
+  };
+}
+
+async function doBackup() {
+  const btn = document.getElementById("btnBackup");
+  const status = document.getElementById("status");
+  const fileList = document.getElementById("fileList");
+
+  const token = localStorage.getItem("fe_token");
+  if (!token) {
+    status.textContent = "No token found. Go back and sign in first.";
+    status.className = "status error";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "⏳ Fetching files…";
+  status.textContent = "";
+  status.className = "status";
+
+  try {
+    // List all files in repo root + uploads folder (CSVs are in root)
+    const res = await fetch(
+      `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/`,
+      { headers: authHeaders() }
+    );
+    if (!res.ok) throw new Error("Failed to list files: " + res.status);
+
+    const files = await res.json();
+    const csvFiles = files.filter(f => f.name.endsWith(".csv") && f.type === "file");
+
+    if (!csvFiles.length) {
+      status.textContent = "No CSV files found.";
+      btn.disabled = false;
+      btn.textContent = "⬇️ Download Backup (.zip)";
+      return;
+    }
+
+    // Show file list
+    fileList.innerHTML = csvFiles.map(f => `<div>${f.name} (${f.size} B)</div>`).join("");
+
+    // Build zip
+    const zip = new JSZip();
+
+    for (let i = 0; i < csvFiles.length; i++) {
+      const f = csvFiles[i];
+      btn.textContent = `⏳ Downloading ${i + 1}/${csvFiles.length}…`;
+      status.textContent = f.name;
+
+      const fileRes = await fetch(
+        `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${f.name}`,
+        { headers: authHeaders() }
+      );
+      if (!fileRes.ok) throw new Error(`Failed to fetch ${f.name}: ${fileRes.status}`);
+
+      const data = await fileRes.json();
+      zip.file(f.name, atob(data.content));
+    }
+
+    // Generate zip blob
+    btn.textContent = "⏳ Creating ZIP…";
+    status.textContent = "Compressing…";
+
+    const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+
+    // Trigger download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `backup_${GH.repo}_${new Date().toISOString().slice(0,10)}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    status.textContent = `✅ Done! ${csvFiles.length} files, ${(blob.size / 1024).toFixed(1)} KB`;
+    btn.disabled = false;
+    btn.textContent = "⬇️ Download Backup (.zip)";
+
+  } catch (e) {
+    status.textContent = "❌ " + e.message;
+    status.className = "status error";
+    btn.disabled = false;
+    btn.textContent = "⬇️ Download Backup (.zip)";
+  }
+}
+</script>
+</body>
+</html>   
