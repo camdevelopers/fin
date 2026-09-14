@@ -63,7 +63,7 @@
 <div style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>Item</th><th>Quantity</th><th>Number</th><th>Available</th><th>Remarks</th><th></th></tr>
+      <tr><th>Item</th><th>Quantity</th><th>Number</th><th>Available</th><th>Remarks</th></tr>   
     </thead>
     <tbody id="tbody"></tbody>
   </table>
@@ -212,7 +212,7 @@ function parseCsv(csv) {
 function render() {
   const tbody = document.getElementById("tbody");
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">No items yet. Tap "+ Add Item" to start.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">No items yet. Tap "+ Add Item" to start.</td></tr>`;
     return;
   }
 
@@ -223,7 +223,6 @@ function render() {
       <td><input type="tel" inputmode="numeric" class="num-input" value="${r.number}" onchange="setNumber(${i}, this.value)"></td>
       <td><button class="toggle ${r.available === "YES" ? "yes" : "no"}" onclick="toggleAvail(${i})">${r.available}</button></td>
       <td>${r.remarks || "—"}</td>
-      <td><button class="del-btn" onclick="delItem(${i})">🗑️</button></td>
     </tr>
   `).join("");
 }
