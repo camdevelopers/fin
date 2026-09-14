@@ -43,6 +43,12 @@
   }
   .num-input:focus { border-color: #1a1a2e; outline: none; }
 
+  .remarks-input {
+  width: 80px; padding: 4px 6px; border: 1px solid #ddd;
+  border-radius: 4px; font-size: 0.85rem;
+ }
+ .remarks-input:focus { border-color: #1a1a2e; outline: none; width: 100px; }   
+
   .del-btn { background: none; border: none; cursor: pointer; font-size: 0.85rem; opacity: 0.6; }
   .del-btn:hover { opacity: 1; }
 
@@ -222,7 +228,7 @@ function render() {
       <td><button class="toggle ${r.quantity === "HIGH" ? "high" : "low"}" onclick="toggleQty(${i})">${r.quantity}</button></td>
       <td><input type="text" class="num-input" value="${r.number}" onchange="setNumber(${i}, this.value)"></td>
       <td><button class="toggle ${r.available === "YES" ? "yes" : "no"}" onclick="toggleAvail(${i})">${r.available}</button></td>
-      <td>${r.remarks || "—"}</td>
+      <td><input type="text" class="remarks-input" value="${r.remarks}" onchange="setRemarks(${i}, this.value)" placeholder="—"></td>   
     </tr>
   `).join("");
 }
@@ -244,6 +250,12 @@ function toggleAvail(i) {
 
 function setNumber(i, val) {
   items[i].number = val;
+  saveLocal();
+  backgroundSync();
+}
+
+function setRemarks(i, val) {
+  items[i].remarks = val;
   saveLocal();
   backgroundSync();
 }
