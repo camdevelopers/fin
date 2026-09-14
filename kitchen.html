@@ -13,7 +13,6 @@
   .top-bar a { font-size: 0.85rem; color: #1a1a2e; text-decoration: none; }
   .top-bar .add-link { background: #1a1a2e; color: #fff; padding: 6px 14px; border-radius: 6px; font-weight: 600; }
 
-  /* Sync icon */
   #syncIcon {
     position: fixed; top: 12px; right: 12px;
     width: 28px; height: 28px; border-radius: 50%;
@@ -38,6 +37,12 @@
   .toggle.yes { background: #fff; color: #333; border: 1px solid #ccc; }
   .toggle.no { background: #212121; color: #fff; }
 
+  .num-input {
+    width: 50px; padding: 4px 6px; border: 1px solid #ddd;
+    border-radius: 4px; font-size: 0.85rem; text-align: center;
+  }
+  .num-input:focus { border-color: #1a1a2e; outline: none; }
+
   .del-btn { background: none; border: none; cursor: pointer; font-size: 0.85rem; opacity: 0.6; }
   .del-btn:hover { opacity: 1; }
 
@@ -58,7 +63,7 @@
 <div style="overflow-x:auto;">
   <table>
     <thead>
-      <tr><th>Item</th><th>Quantity</th><th>Available</th><th>Remarks</th><th></th></tr>
+      <tr><th>Item</th><th>Quantity</th><th>Number</th><th>Available</th><th>Remarks</th><th></th></tr>
     </thead>
     <tbody id="tbody"></tbody>
   </table>
@@ -71,7 +76,7 @@ const GH = {
   branch: "main"
 };
 const FILE_NAME = "kitchen.csv";
-const HEADER = "item|quantity|available|remarks\n";
+const HEADER = "item|quantity|number|available|remarks\n";
 const LS_KEY = "kitchen_rows";
 
 let items = [];
@@ -82,13 +87,10 @@ let dirty = false;
   const token = localStorage.getItem("fe_token");
   if (!token) { location.href = "index.html"; return; }
 
-  // Restore from localStorage
   const saved = localStorage.getItem(LS_KEY);
   if (saved) items = JSON.parse(saved);
-  dirty = localStorage.getItem("kitchen_dirty") === "1";  // ← ADD THIS
+  dirty = localStorage.getItem("kitchen_dirty") === "1";
   render();
-
-  // Background sync
   backgroundSync();
 })();
 
@@ -114,7 +116,7 @@ function authHeaders() {
 function saveLocal() {
   localStorage.setItem(LS_KEY, JSON.stringify(items));
   dirty = true;
-  localStorage.setItem("kitchen_dirty", "1");  // ← ADD THIS
+  localStorage.setItem("kitchen_dirty", "1");
 }
 
 // ===== BACKGROUND SYNC =====
@@ -139,7 +141,6 @@ async function pull() {
     const csv = atob(data.content);
     const remote = parseCsv(csv);
 
-    // If dirty, push first (local wins), otherwise use remote
     if (dirty) {
       await push();
     } else {
@@ -164,7 +165,7 @@ async function push() {
 
     let csv = HEADER;
     for (const r of items) {
-      csv += [r.item, r.quantity, r.available, r.remarks || ""].join("|") + "\n";
+      csv += [r.item, r.quantity, r.number || "", r.available, r.remarks || ""].join("|") + "\n";
     }
 
     const putRes = await fetch(url, {
@@ -180,10 +181,9 @@ async function push() {
 
     if (putRes.ok) {
       dirty = false;
-      localStorage.removeItem("kitchen_dirty");  // ← ADD THIS
+      localStorage.removeItem("kitchen_dirty");
       setSyncIcon("synced");
     } else if (putRes.status === 409) {
-      // Conflict — retry once
       await push();
     } else {
       setSyncIcon("error");
@@ -201,8 +201,9 @@ function parseCsv(csv) {
     return {
       item: parts[0],
       quantity: parts[1] || "LOW",
-      available: parts[2] || "NO",
-      remarks: parts[3] || ""
+      number: parts[2] || "",
+      available: parts[3] || "NO",
+      remarks: parts[4] || ""
     };
   });
 }
@@ -211,7 +212,7 @@ function parseCsv(csv) {
 function render() {
   const tbody = document.getElementById("tbody");
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">No items yet. Tap "+ Add Item" to start.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">No items yet. Tap "+ Add Item" to start.</td></tr>`;
     return;
   }
 
@@ -219,6 +220,7 @@ function render() {
     <tr>
       <td><strong>${r.item}</strong></td>
       <td><button class="toggle ${r.quantity === "HIGH" ? "high" : "low"}" onclick="toggleQty(${i})">${r.quantity}</button></td>
+      <td><input type="tel" inputmode="numeric" class="num-input" value="${r.number}" onchange="setNumber(${i}, this.value)"></td>
       <td><button class="toggle ${r.available === "YES" ? "yes" : "no"}" onclick="toggleAvail(${i})">${r.available}</button></td>
       <td>${r.remarks || "—"}</td>
       <td><button class="del-btn" onclick="delItem(${i})">🗑️</button></td>
@@ -238,6 +240,12 @@ function toggleAvail(i) {
   items[i].available = items[i].available === "YES" ? "NO" : "YES";
   saveLocal();
   render();
+  backgroundSync();
+}
+
+function setNumber(i, val) {
+  items[i].number = val;
+  saveLocal();
   backgroundSync();
 }
 
