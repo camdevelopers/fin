@@ -85,6 +85,7 @@ let dirty = false;
   // Restore from localStorage
   const saved = localStorage.getItem(LS_KEY);
   if (saved) items = JSON.parse(saved);
+  dirty = localStorage.getItem("kitchen_dirty") === "1";  // ← ADD THIS
   render();
 
   // Background sync
@@ -113,6 +114,7 @@ function authHeaders() {
 function saveLocal() {
   localStorage.setItem(LS_KEY, JSON.stringify(items));
   dirty = true;
+  localStorage.setItem("kitchen_dirty", "1");  // ← ADD THIS
 }
 
 // ===== BACKGROUND SYNC =====
@@ -178,6 +180,7 @@ async function push() {
 
     if (putRes.ok) {
       dirty = false;
+      localStorage.removeItem("kitchen_dirty");  // ← ADD THIS
       setSyncIcon("synced");
     } else if (putRes.status === 409) {
       // Conflict — retry once
