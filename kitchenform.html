@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1a1a2e">
+<title>Add Kitchen Item</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 16px; }
+  h1 { font-size: 1.2rem; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 400px; }
+  .card label { font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px; margin-top: 12px; }
+  .card input, .card select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; }
+  .card button { width: 100%; padding: 12px; background: #1a1a2e; color: #fff; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer; margin-top: 16px; }
+  .card button:disabled { opacity: 0.5; }
+  .back { font-size: 0.85rem; color: #1a1a2e; text-decoration: none; display: inline-block; margin-bottom: 12px; }
+  .msg { font-size: 0.8rem; margin-top: 10px; min-height: 1.2em; }
+  .msg.ok { color: #2e7d32; }
+  .msg.err { color: #c62828; }
+</style>
+</head>
+<body>
+<a class="back" href="kitchen.html">← Back to Kitchen</a>
+<h1>🍳 Add Item</h1>
+
+<div class="card">
+  <label>Item Name</label>
+  <input type="text" id="fItem" placeholder="e.g. Rice, Dal, Oil…" autocomplete="off">
+
+  <label>Quantity</label>
+  <select id="fQty">
+    <option value="HIGH">HIGH</option>
+    <option value="LOW">LOW</option>
+  </select>
+
+  <label>Available</label>
+  <select id="fAvail">
+    <option value="YES">YES</option>
+    <option value="NO">NO</option>
+  </select>
+
+  <label>Remarks</label>
+  <input type="text" id="fRemarks" placeholder="Optional…" autocomplete="off">
+
+  <button id="btn" onclick="addItem()">+ Add Item</button>
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+const GH = {
+  owner: "camdevelopers",
+  repo: "storesoffinancialstoresatrandomrepoandstuffvariablesvariedforever",
+  branch: "main"
+};
+const FILE_NAME = "kitchen.csv";
+const HEADER = "item|quantity|available|remarks\n";
+const LS_KEY = "kitchen_rows";
+
+function authHeaders() {
+  return {
+    "Authorization": `Bearer ${localStorage.getItem("fe_token")}`,
+    "Accept": "application/vnd.github.v3+json",
+    "Content-Type": "application/json"
+  };
+}
+
+async function addItem() {
+  const item = document.getElementById("fItem").value.trim();
+  const quantity = document.getElementById("fQty").value;
+  const available = document.getElementById("fAvail").value;
+  const remarks = document.getElementById("fRemarks").value.trim();
+  const msg = document.getElementById("msg");
+  const btn = document.getElementById("btn");
+
+  if (!item) { msg.textContent = "Enter an item name."; msg.className = "msg err"; return; }
+
+  // Save locally
+  let items = [];
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved) items = JSON.parse(saved);
+
+  // Prevent duplicates
+  if (items.some(r => r.item.toLowerCase() === item.toLowerCase())) {
+    msg.textContent = `"${item}" already exists.`; msg.className = "msg err";
+    return;
+  }
+
+  items.push({ item, quantity, available, remarks });
+  localStorage.setItem(LS_KEY, JSON.stringify(items));
+
+  msg.textContent = "✅ Added. Syncing…"; msg.className = "msg ok";
+  btn.disabled = true;
+  btn.textContent = "⏳ Syncing…";
+
+  // Push to git
+  try {
+    const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${FILE_NAME}`;
+    const getRes = await fetch(url, { headers: authHeaders() });
+    let sha = null, existing = HEADER;
+    if (getRes.ok) {
+      const d = await getRes.json();
+      sha = d.sha;
+      existing = atob(d.content);
+    }
+
+    const newLine = [item, quantity, available, remarks].join("|");
+    const newCsv = existing.endsWith("\n") ? existing + newLine + "\n" : existing + "\n" + newLine + "\n";
+
+    const putRes = await fetch(url, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        message: `kitchen: add ${item}`,
+        content: btoa(newCsv),
+        branch: GH.branch,
+        ...(sha ? { sha } : {})
+      })
+    });
+
+    if (putRes.ok) {
+      msg.textContent = "✅ Added & synced.";
+      setTimeout(() => location.href = "kitchen.html", 800);
+    } else {
+      msg.textContent = "✅ Added locally. Will sync when online.";
+      setTimeout(() => location.href = "kitchen.html", 1200);
+    }
+  } catch (e) {
+    msg.textContent = "✅ Added locally. Will sync when online.";
+    setTimeout(() => location.href = "kitchen.html", 1200);
+  }
+}
+</script>
+</body>
+</html>   
