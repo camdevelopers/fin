@@ -88,6 +88,9 @@ async function addItem() {
 
   items.push({ item, quantity, available, remarks });
   localStorage.setItem(LS_KEY, JSON.stringify(items));
+  localStorage.setItem("kitchen_dirty", "1");  // ← ADD THIS
+
+
 
   msg.textContent = "✅ Added. Syncing…"; msg.className = "msg ok";
   btn.disabled = true;
