@@ -82,6 +82,9 @@ async function load() {
   allRows = [];
 
   for (const file of files) {
+      if (file.name === "kitchen.csv") {
+       continue;
+    }
     const user = file.name.replace(".csv", "");
     const r = await fetch(file.url, { headers: authHeaders() });
     if (!r.ok) continue;
@@ -146,7 +149,7 @@ function render() {
 
   const total = rows.reduce((s, r) => s + r.value, 0);
   document.getElementById("balanceTotal").textContent =
-    `Total (${rows.length} entries): ${total >= 0 ? '+' : ''}${total.toFixed(2)}`;
+    `Balance (${rows.length} entries): ${total >= 0 ? '+' : ''}${total.toFixed(2)}`;
 }
 
 document.getElementById("userFilter").addEventListener("change", render);
