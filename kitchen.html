@@ -4,47 +4,64 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#1a1a2e">
-<title>Add Kitchen Item</title>
+<title>Kitchen Inventory</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 16px; }
-  h1 { font-size: 1.2rem; margin-bottom: 16px; }
-  .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 400px; }
-  .card label { font-size: 0.8rem; font-weight: 600; display: block; margin-bottom: 4px; margin-top: 12px; }
-  .card input, .card select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; }
-  .card button { width: 100%; padding: 12px; background: #1a1a2e; color: #fff; border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600; cursor: pointer; margin-top: 16px; }
-  .card button:disabled { opacity: 0.5; }
-  .back { font-size: 0.85rem; color: #1a1a2e; text-decoration: none; display: inline-block; margin-bottom: 12px; }
-  .msg { font-size: 0.8rem; margin-top: 10px; min-height: 1.2em; }
-  .msg.ok { color: #2e7d32; }
-  .msg.err { color: #c62828; }
+  h1 { font-size: 1.2rem; margin-bottom: 12px; }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .top-bar a { font-size: 0.85rem; color: #1a1a2e; text-decoration: none; }
+  .top-bar .add-link { background: #1a1a2e; color: #fff; padding: 6px 14px; border-radius: 6px; font-weight: 600; }
+
+  /* Sync icon */
+  #syncIcon {
+    position: fixed; top: 12px; right: 12px;
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; z-index: 999;
+  }
+  #syncIcon.synced { background: #e8f5e9; }
+  #syncIcon.pending { background: #fff3e0; }
+  #syncIcon.error { background: #ffebee; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.85rem; }
+  th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #eee; }
+  th { background: #1a1a2e; color: #fff; font-weight: 600; font-size: 0.8rem; }
+  tr:last-child td { border-bottom: none; }
+
+  .toggle {
+    display: inline-block; padding: 4px 12px; border-radius: 12px;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer; border: none;
+  }
+  .toggle.high { background: #e8f5e9; color: #2e7d32; }
+  .toggle.low { background: #ffebee; color: #c62828; }
+  .toggle.yes { background: #fff; color: #333; border: 1px solid #ccc; }
+  .toggle.no { background: #212121; color: #fff; }
+
+  .del-btn { background: none; border: none; cursor: pointer; font-size: 0.85rem; opacity: 0.6; }
+  .del-btn:hover { opacity: 1; }
+
+  .empty { text-align: center; padding: 32px; color: #999; font-size: 0.9rem; }
 </style>
 </head>
 <body>
-<a class="back" href="kitchen.html">← Back to Kitchen</a>
-<h1>🍳 Add Item</h1>
 
-<div class="card">
-  <label>Item Name</label>
-  <input type="text" id="fItem" placeholder="e.g. Rice, Dal, Oil…" autocomplete="off">
+<div id="syncIcon" class="synced" title="Synced">✓</div>
 
-  <label>Quantity</label>
-  <select id="fQty">
-    <option value="HIGH">HIGH</option>
-    <option value="LOW">LOW</option>
-  </select>
+<div class="top-bar">
+  <a href="index.html">← Back</a>
+  <a href="kitchenform.html" class="add-link">+ Add Item</a>
+</div>
 
-  <label>Available</label>
-  <select id="fAvail">
-    <option value="YES">YES</option>
-    <option value="NO">NO</option>
-  </select>
+<h1>🍳 Kitchen Inventory</h1>
 
-  <label>Remarks</label>
-  <input type="text" id="fRemarks" placeholder="Optional…" autocomplete="off">
-
-  <button id="btn" onclick="addItem()">+ Add Item</button>
-  <div class="msg" id="msg"></div>
+<div style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr><th>Item</th><th>Quantity</th><th>Available</th><th>Remarks</th><th></th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
 </div>
 
 <script>
@@ -57,6 +74,33 @@ const FILE_NAME = "kitchen.csv";
 const HEADER = "item|quantity|available|remarks\n";
 const LS_KEY = "kitchen_rows";
 
+let items = [];
+let dirty = false;
+
+// ===== INIT =====
+(function init() {
+  const token = localStorage.getItem("fe_token");
+  if (!token) { location.href = "index.html"; return; }
+
+  // Restore from localStorage
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved) items = JSON.parse(saved);
+  render();
+
+  // Background sync
+  backgroundSync();
+})();
+
+// ===== SYNC ICON =====
+function setSyncIcon(state) {
+  const el = document.getElementById("syncIcon");
+  el.className = state;
+  if (state === "synced") { el.textContent = "✓"; el.title = "Synced"; }
+  else if (state === "pending") { el.textContent = "⏳"; el.title = "Pending sync"; }
+  else { el.textContent = "✗"; el.title = "Sync error"; }
+}
+
+// ===== AUTH =====
 function authHeaders() {
   return {
     "Authorization": `Bearer ${localStorage.getItem("fe_token")}`,
@@ -65,71 +109,148 @@ function authHeaders() {
   };
 }
 
-async function addItem() {
-  const item = document.getElementById("fItem").value.trim();
-  const quantity = document.getElementById("fQty").value;
-  const available = document.getElementById("fAvail").value;
-  const remarks = document.getElementById("fRemarks").value.trim();
-  const msg = document.getElementById("msg");
-  const btn = document.getElementById("btn");
-
-  if (!item) { msg.textContent = "Enter an item name."; msg.className = "msg err"; return; }
-
-  // Save locally
-  let items = [];
-  const saved = localStorage.getItem(LS_KEY);
-  if (saved) items = JSON.parse(saved);
-
-  // Prevent duplicates
-  if (items.some(r => r.item.toLowerCase() === item.toLowerCase())) {
-    msg.textContent = `"${item}" already exists.`; msg.className = "msg err";
-    return;
-  }
-
-  items.push({ item, quantity, available, remarks });
+// ===== PERSIST =====
+function saveLocal() {
   localStorage.setItem(LS_KEY, JSON.stringify(items));
+  dirty = true;
+}
 
-  msg.textContent = "✅ Added. Syncing…"; msg.className = "msg ok";
-  btn.disabled = true;
-  btn.textContent = "⏳ Syncing…";
+// ===== BACKGROUND SYNC =====
+async function backgroundSync() {
+  if (navigator.onLine) {
+    await pull();
+    if (dirty) await push();
+    setSyncIcon("synced");
+  } else {
+    setSyncIcon("pending");
+  }
+}
 
-  // Push to git
+async function pull() {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${FILE_NAME}`,
+      { headers: authHeaders() }
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const csv = atob(data.content);
+    const remote = parseCsv(csv);
+
+    // If dirty, push first (local wins), otherwise use remote
+    if (dirty) {
+      await push();
+    } else {
+      items = remote;
+      localStorage.setItem(LS_KEY, JSON.stringify(items));
+      render();
+    }
+  } catch (e) {
+    setSyncIcon("error");
+  }
+}
+
+async function push() {
   try {
     const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${FILE_NAME}`;
     const getRes = await fetch(url, { headers: authHeaders() });
-    let sha = null, existing = HEADER;
+    let sha = null;
     if (getRes.ok) {
       const d = await getRes.json();
       sha = d.sha;
-      existing = atob(d.content);
     }
 
-    const newLine = [item, quantity, available, remarks].join("|");
-    const newCsv = existing.endsWith("\n") ? existing + newLine + "\n" : existing + "\n" + newLine + "\n";
+    let csv = HEADER;
+    for (const r of items) {
+      csv += [r.item, r.quantity, r.available, r.remarks || ""].join("|") + "\n";
+    }
 
     const putRes = await fetch(url, {
       method: "PUT",
       headers: authHeaders(),
       body: JSON.stringify({
-        message: `kitchen: add ${item}`,
-        content: btoa(newCsv),
+        message: `kitchen: update`,
+        content: btoa(csv),
         branch: GH.branch,
         ...(sha ? { sha } : {})
       })
     });
 
     if (putRes.ok) {
-      msg.textContent = "✅ Added & synced.";
-      setTimeout(() => location.href = "kitchen.html", 800);
+      dirty = false;
+      setSyncIcon("synced");
+    } else if (putRes.status === 409) {
+      // Conflict — retry once
+      await push();
     } else {
-      msg.textContent = "✅ Added locally. Will sync when online.";
-      setTimeout(() => location.href = "kitchen.html", 1200);
+      setSyncIcon("error");
     }
   } catch (e) {
-    msg.textContent = "✅ Added locally. Will sync when online.";
-    setTimeout(() => location.href = "kitchen.html", 1200);
+    setSyncIcon("pending");
   }
 }
+
+// ===== CSV PARSER =====
+function parseCsv(csv) {
+  const lines = csv.trim().split("\n").slice(1);
+  return lines.filter(l => l.trim()).map(line => {
+    const parts = line.split("|");
+    return {
+      item: parts[0],
+      quantity: parts[1] || "LOW",
+      available: parts[2] || "NO",
+      remarks: parts[3] || ""
+    };
+  });
+}
+
+// ===== RENDER =====
+function render() {
+  const tbody = document.getElementById("tbody");
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">No items yet. Tap "+ Add Item" to start.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map((r, i) => `
+    <tr>
+      <td><strong>${r.item}</strong></td>
+      <td><button class="toggle ${r.quantity === "HIGH" ? "high" : "low"}" onclick="toggleQty(${i})">${r.quantity}</button></td>
+      <td><button class="toggle ${r.available === "YES" ? "yes" : "no"}" onclick="toggleAvail(${i})">${r.available}</button></td>
+      <td>${r.remarks || "—"}</td>
+      <td><button class="del-btn" onclick="delItem(${i})">🗑️</button></td>
+    </tr>
+  `).join("");
+}
+
+// ===== ACTIONS =====
+function toggleQty(i) {
+  items[i].quantity = items[i].quantity === "HIGH" ? "LOW" : "HIGH";
+  saveLocal();
+  render();
+  backgroundSync();
+}
+
+function toggleAvail(i) {
+  items[i].available = items[i].available === "YES" ? "NO" : "YES";
+  saveLocal();
+  render();
+  backgroundSync();
+}
+
+function delItem(i) {
+  if (!confirm(`Delete "${items[i].item}"?`)) return;
+  items.splice(i, 1);
+  saveLocal();
+  render();
+  backgroundSync();
+}
+
+// ===== AUTO-SYNC =====
+window.addEventListener("online", () => backgroundSync());
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") backgroundSync();
+});
 </script>
 </body>
 </html>   
