@@ -220,7 +220,7 @@ function render() {
     <tr>
       <td><strong>${r.item}</strong></td>
       <td><button class="toggle ${r.quantity === "HIGH" ? "high" : "low"}" onclick="toggleQty(${i})">${r.quantity}</button></td>
-      <td><input type="tel" inputmode="numeric" class="num-input" value="${r.number}" onchange="setNumber(${i}, this.value)"></td>
+      <td><input type="text" class="num-input" value="${r.number}" onchange="setNumber(${i}, this.value)"></td>
       <td><button class="toggle ${r.available === "YES" ? "yes" : "no"}" onclick="toggleAvail(${i})">${r.available}</button></td>
       <td>${r.remarks || "—"}</td>
     </tr>
