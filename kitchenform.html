@@ -34,6 +34,9 @@
     <option value="LOW">LOW</option>
   </select>
 
+  <label>Number</label>
+  <input type="tel" inputmode="numeric" id="fNumber" placeholder="e.g. 12" autocomplete="off">   
+ 
   <label>Available</label>
   <select id="fAvail">
     <option value="YES">YES</option>
@@ -68,6 +71,7 @@ function authHeaders() {
 async function addItem() {
   const item = document.getElementById("fItem").value.trim();
   const quantity = document.getElementById("fQty").value;
+  const number = document.getElementById("fNumber").value.trim();   
   const available = document.getElementById("fAvail").value;
   const remarks = document.getElementById("fRemarks").value.trim();
   const msg = document.getElementById("msg");
@@ -86,7 +90,8 @@ async function addItem() {
     return;
   }
 
-  items.push({ item, quantity, available, remarks });
+  //items.push({ item, quantity, available, remarks });
+  items.push({ item, quantity, number, available, remarks });   
   localStorage.setItem(LS_KEY, JSON.stringify(items));
   localStorage.setItem("kitchen_dirty", "1");  // ← ADD THIS
 
@@ -107,7 +112,8 @@ async function addItem() {
       existing = atob(d.content);
     }
 
-    const newLine = [item, quantity, available, remarks].join("|");
+    //const newLine = [item, quantity, available, remarks].join("|");
+    const newLine = [item, quantity, number, available, remarks].join("|");   
     const newCsv = existing.endsWith("\n") ? existing + newLine + "\n" : existing + "\n" + newLine + "\n";
 
     const putRes = await fetch(url, {
