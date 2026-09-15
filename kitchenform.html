@@ -37,6 +37,9 @@
   <label>Number</label>
   <!-- <input type="tel" inputmode="numeric" id="fNumber" placeholder="e.g. 12" autocomplete="off">   -->
   <input type="text" id="fNumber" placeholder="e.g. 12" autocomplete="off">   
+
+ <label>Units</label>
+<input type="text" id="fUnits" placeholder="e.g. kg, L, pcs, pack…" autocomplete="off">   
  
   <label>Available</label>
   <select id="fAvail">
@@ -72,7 +75,8 @@ function authHeaders() {
 async function addItem() {
   const item = document.getElementById("fItem").value.trim();
   const quantity = document.getElementById("fQty").value;
-  const number = document.getElementById("fNumber").value.trim();   
+  const number = document.getElementById("fNumber").value.trim();
+  const units = document.getElementById("fUnits").value.trim();   
   const available = document.getElementById("fAvail").value;
   const remarks = document.getElementById("fRemarks").value.trim();
   const msg = document.getElementById("msg");
@@ -92,7 +96,8 @@ async function addItem() {
   }
 
   //items.push({ item, quantity, available, remarks });
-  items.push({ item, quantity, number, available, remarks });   
+  //items.push({ item, quantity, number, available, remarks });
+  items.push({ item, quantity, number, units, available, remarks });   
   localStorage.setItem(LS_KEY, JSON.stringify(items));
   localStorage.setItem("kitchen_dirty", "1");  // ← ADD THIS
 
@@ -114,7 +119,8 @@ async function addItem() {
     }
 
     //const newLine = [item, quantity, available, remarks].join("|");
-    const newLine = [item, quantity, number, available, remarks].join("|");   
+    //const newLine = [item, quantity, number, available, remarks].join("|");
+    const newLine = [item, quantity, number, units, available, remarks].join("|");   
     const newCsv = existing.endsWith("\n") ? existing + newLine + "\n" : existing + "\n" + newLine + "\n";
 
     const putRes = await fetch(url, {
