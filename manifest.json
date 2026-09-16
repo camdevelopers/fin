@@ -1,6 +1,6 @@
 {
-  "name": "Trust Expenses",
-  "short_name": "Expenses",
+  "name": "Office Expenses",
+  "short_name": "Office",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f5f5f5",
