@@ -1,0 +1,333 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1a1a2e">
+<title>Kitchen Inventory</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 16px; }
+  h1 { font-size: 1.2rem; margin-bottom: 12px; }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .top-bar a { font-size: 0.85rem; color: #1a1a2e; text-decoration: none; }
+  .top-bar .add-link { background: #1a1a2e; color: #fff; padding: 6px 14px; border-radius: 6px; font-weight: 600; }
+
+  #syncIcon {
+    position: fixed; top: 12px; right: 12px;
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; z-index: 999;
+  }
+  #syncIcon.synced { background: #e8f5e9; }
+  #syncIcon.pending { background: #fff3e0; }
+  #syncIcon.error { background: #ffebee; }
+
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 0.85rem; }
+  th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid #eee; }
+  th { background: #1a1a2e; color: #fff; font-weight: 600; font-size: 0.8rem; }
+  tr:last-child td { border-bottom: none; }
+
+  .toggle {
+    display: inline-block; padding: 4px 12px; border-radius: 12px;
+    font-size: 0.78rem; font-weight: 600; cursor: pointer; border: none;
+  }
+  .toggle.high { background: #e8f5e9; color: #2e7d32; }
+  .toggle.low { background: #ffebee; color: #c62828; }
+  .toggle.yes { background: #fff; color: #333; border: 1px solid #ccc; }
+  .toggle.no { background: #212121; color: #fff; }
+
+  .num-input {
+    width: 50px; padding: 4px 6px; border: 1px solid #ddd;
+    border-radius: 4px; font-size: 0.85rem; text-align: center;
+  }
+  .num-input:focus { border-color: #1a1a2e; outline: none; }
+
+  .units-input {
+    width: 50px; padding: 4px 6px; border: 1px solid #ddd;
+    border-radius: 4px; font-size: 0.85rem; text-align: center;
+  }
+  .units-input:focus { border-color: #1a1a2e; outline: none; }
+
+  .remarks-input {
+    width: 80px; padding: 4px 6px; border: 1px solid #ddd;
+    border-radius: 4px; font-size: 0.85rem;
+  }
+  .remarks-input:focus { border-color: #1a1a2e; outline: none; width: 100px; }
+
+  .empty { text-align: center; padding: 32px; color: #999; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+
+<div id="syncIcon" class="synced" title="Synced">✓</div>
+
+<div class="top-bar">
+  <a href="index.html">← Back</a>
+  <div style="display:flex;gap:8px;">
+    <button id="pushBtn" onclick="doPush()" style="padding:6px 14px;border:none;border-radius:6px;font-size:0.85rem;font-weight:600;cursor:pointer;background:#43a047;color:#fff;">✓ Synced</button>
+    <a href="kitchenform.html" class="add-link">+ Add Item</a>
+  </div>
+</div>
+
+<h1>🍳 Kitchen Inventory</h1>
+
+<div style="overflow-x:auto;">
+  <table>
+    <thead>
+      <tr><th>Item</th><th>Quantity</th><th>Number</th><th>Units</th><th>Available</th><th>Remarks</th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const GH = {
+  owner: "camdevelopers",
+  repo: "storesoffinancialstoresatrandomrepoandstuffvariablesvariedforever",
+  branch: "main"
+};
+const FILE_NAME = "kitchen.csv";
+const HEADER = "item|quantity|number|units|available|remarks\n";
+const LS_KEY = "kitchen_rows";
+
+let items = [];
+let dirty = false;
+let hasLoaded = false;
+
+// ===== INIT =====
+(function init() {
+  const token = localStorage.getItem("fe_token");
+  if (!token) { location.href = "index.html"; return; }
+
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved) items = JSON.parse(saved);
+  dirty = localStorage.getItem("kitchen_dirty") === "1";
+  render();
+  initSync();
+})();
+
+// ===== SYNC ICON =====
+function setSyncIcon(state) {
+  const el = document.getElementById("syncIcon");
+  el.className = state;
+  if (state === "synced") { el.textContent = "✓"; el.title = "Synced"; }
+  else if (state === "pending") { el.textContent = "⏳"; el.title = "Offline"; }
+  else { el.textContent = "✗"; el.title = "Sync error"; }
+}
+
+// ===== PUSH BUTTON STATE =====
+function updatePushBtn() {
+  const btn = document.getElementById("pushBtn");
+  if (dirty) {
+    btn.style.background = "#f57c00";
+    btn.textContent = "⬆ Push";
+  } else {
+    btn.style.background = "#43a047";
+    btn.textContent = "✓ Synced";
+  }
+}
+
+// ===== AUTH =====
+function authHeaders() {
+  return {
+    "Authorization": `Bearer ${localStorage.getItem("fe_token")}`,
+    "Accept": "application/vnd.github.v3+json",
+    "Content-Type": "application/json"
+  };
+}
+
+// ===== PERSIST =====
+function saveLocal() {
+  localStorage.setItem(LS_KEY, JSON.stringify(items));
+  dirty = true;
+  localStorage.setItem("kitchen_dirty", "1");
+}
+
+// ===== INIT SYNC (one-way pull on first load only) =====
+async function initSync() {
+  if (!navigator.onLine) {
+    setSyncIcon("pending");
+    updatePushBtn();
+    return;
+  }
+  if (!hasLoaded) {
+    const saved = localStorage.getItem(LS_KEY);
+    if (!saved || JSON.parse(saved).length === 0) {
+      await pull();
+    }
+    hasLoaded = true;
+  }
+  setSyncIcon("synced");
+  updatePushBtn();
+}
+
+// ===== PULL (only on first load) =====
+async function pull() {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${FILE_NAME}`,
+      { headers: authHeaders() }
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const csv = atob(data.content);
+    items = parseCsv(csv);
+    localStorage.setItem(LS_KEY, JSON.stringify(items));
+    render();
+  } catch (e) {
+    setSyncIcon("error");
+  }
+}
+
+// ===== PUSH (manual, all at once) =====
+async function push() {
+  try {
+    const url = `https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/${FILE_NAME}`;
+    const getRes = await fetch(url, { headers: authHeaders() });
+    let sha = null;
+    if (getRes.ok) {
+      const d = await getRes.json();
+      sha = d.sha;
+    }
+
+    let csv = HEADER;
+    for (const r of items) {
+      csv += [r.item, r.quantity, r.number || "", r.units || "", r.available, r.remarks || ""].join("|") + "\n";
+    }
+
+    const putRes = await fetch(url, {
+      method: "PUT",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        message: `kitchen: update`,
+        content: btoa(csv),
+        branch: GH.branch,
+        ...(sha ? { sha } : {})
+      })
+    });
+
+    if (putRes.ok) {
+      dirty = false;
+      localStorage.removeItem("kitchen_dirty");
+      setSyncIcon("synced");
+      return true;
+    } else if (putRes.status === 409) {
+      return await push();
+    } else {
+      setSyncIcon("error");
+      return false;
+    }
+  } catch (e) {
+    setSyncIcon("pending");
+    return false;
+  }
+}
+
+// ===== DO PUSH (button click) =====
+async function doPush() {
+  if (!dirty) return;
+  if (!navigator.onLine) { setSyncIcon("pending"); return; }
+
+  const btn = document.getElementById("pushBtn");
+  btn.disabled = true;
+  btn.style.background = "#757575";
+  btn.textContent = "⏳ Pushing…";
+
+  await push();
+
+  btn.disabled = false;
+  updatePushBtn();
+}
+
+// ===== CSV PARSER =====
+function parseCsv(csv) {
+  const lines = csv.trim().split("\n").slice(1);
+  return lines.filter(l => l.trim()).map(line => {
+    const parts = line.split("|");
+    return {
+      item: parts[0],
+      quantity: parts[1] || "LOW",
+      number: parts[2] || "",
+      units: parts[3] || "",
+      available: parts[4] || "NO",
+      remarks: parts[5] || ""
+    };
+  });
+}
+
+// ===== RENDER =====
+function render() {
+  const tbody = document.getElementById("tbody");
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">No items yet. Tap "+ Add Item" to start.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = items.map((r, i) => `
+    <tr>
+      <td><strong>${r.item}</strong></td>
+      <td><button class="toggle ${r.quantity === "HIGH" ? "high" : "low"}" onclick="toggleQty(${i})">${r.quantity}</button></td>
+      <td><input type="tel" inputmode="numeric" class="num-input" value="${r.number}" onchange="setNumber(${i}, this.value)"></td>
+      <td><input type="text" class="units-input" value="${r.units}" onchange="setUnits(${i}, this.value)" placeholder="—"></td>
+      <td><button class="toggle ${r.available === "YES" ? "yes" : "no"}" onclick="toggleAvail(${i})">${r.available}</button></td>
+      <td><input type="text" class="remarks-input" value="${r.remarks}" onchange="setRemarks(${i}, this.value)" placeholder="—"></td>
+    </tr>
+  `).join("");
+}
+
+// ===== ACTIONS =====
+function toggleQty(i) {
+  items[i].quantity = items[i].quantity === "HIGH" ? "LOW" : "HIGH";
+  saveLocal();
+  render();
+  updatePushBtn();
+}
+
+function toggleAvail(i) {
+  items[i].available = items[i].available === "YES" ? "NO" : "YES";
+  saveLocal();
+  render();
+  updatePushBtn();
+}
+
+function setNumber(i, val) {
+  items[i].number = val;
+  saveLocal();
+  updatePushBtn();
+}
+
+function setUnits(i, val) {
+  items[i].units = val;
+  saveLocal();
+  updatePushBtn();
+}
+
+function setRemarks(i, val) {
+  items[i].remarks = val;
+  saveLocal();
+  updatePushBtn();
+}
+
+function delItem(i) {
+  if (!confirm(`Delete "${items[i].item}"?`)) return;
+  items.splice(i, 1);
+  saveLocal();
+  render();
+  updatePushBtn();
+}
+
+// ===== AUTO-SYNC (pull only on first load, no auto-push) =====
+window.addEventListener("online", () => {
+  setSyncIcon("synced");
+  initSync();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") initSync();
+});
+</script>
+</body>
+</html>
+```
+
