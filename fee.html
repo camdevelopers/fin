@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fee Dashboard v9</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="grid.css">
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
+  <style>
+    /* ─── Login ─── */
+    .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .login-panel {
+      width: 360px; background: #18181b; border: 1px solid #27272a;
+      border-radius: 10px; padding: 32px;
+    }
+    .login-panel h2 { font-size: 16px; color: #e4e4e7; margin: 0 0 8px; }
+    .login-panel p { font-size: 12px; color: #71717a; margin: 0 0 24px; }
+    .login-panel label { display: block; font-size: 11px; color: #71717a; margin-bottom: 4px; }
+    .login-panel input {
+      width: 100%; padding: 10px 12px; background: #27272a; border: 1px solid #3f3f46;
+      border-radius: 6px; color: #e4e4e7; font-size: 13px; outline: none; margin-bottom: 12px;
+    }
+    .login-panel input:focus { border-color: #6366f1; }
+    .login-btn {
+      width: 100%; padding: 12px; background: #6366f1; color: #fff; border: none;
+      border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .login-btn:hover { background: #4f46e5; }
+    .login-btn:disabled { background: #3f3f46; cursor: not-allowed; }
+    .login-error { color: #f87171; font-size: 12px; margin-top: 8px; display: none; }
+
+    /* ─── Setup Progress ─── */
+    .setup-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .setup-panel { text-align: center; color: #a1a1aa; font-size: 14px; }
+    .setup-panel .spinner {
+      width: 32px; height: 32px; border: 3px solid #3f3f46; border-top-color: #6366f1;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .setup-panel .status { font-size: 12px; color: #71717a; margin-top: 8px; }
+
+    /* ─── Main Table ─── */
+    .feestatusDEL-wrap { max-width: 1200px; margin: 0 auto; }
+    .feestatus-wrap { margin: 0 auto; width: fit-content; }   
+    .feestatus-scroll { overflow-y: auto; overflow-x: visible; max-height: 75vh; background: #18181b; border-left: 1px solid #27272a; border-right: 1px solid #27272a; }
+    .feestatus-toolbar {
+      display: flex; gap: 12px; align-items: center;
+      padding: 12px 16px; background: #18181b;
+      border: 1px solid #27272a; border-radius: 10px 10px 0 0;
+    }
+    .feestatus-toolbar input, .feestatus-toolbar select {
+      padding: 6px 12px; background: #27272a; border: 1px solid #3f3f46;
+      border-radius: 6px; color: #e4e4e7; font-size: 13px; outline: none;
+    }
+    .feestatus-toolbar input:focus, .feestatus-toolbar select:focus { border-color: #6366f1; }
+    .feestatus-scroll { overflow: auto; max-height: 75vh; background: #18181b; border-left: 1px solid #27272a; border-right: 1px solid #27272a; }
+    .feestatus-table { border-collapse: separate; border-spacing: 0; font-size: 13px; }
+    .feestatus-table th, .feestatus-table td { padding: 8px 12px; white-space: nowrap; text-align: left; border-bottom: 1px solid #27272a; }
+    .feestatus-table thead th {
+      position: sticky; top: 0; z-index: 2; background: #1c1c1f; color: #a1a1aa;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 1px solid #3f3f46; user-select: none; cursor: pointer;
+    }
+    .feestatus-table thead th:hover { color: #e4e4e7; }
+    .feestatus-table tbody tr:hover { background: #1f1f23; }
+    .feestatus-table tbody tr:nth-child(even) { background: #1a1a1e; }
+    .feestatus-table tbody tr:nth-child(even):hover { background: #1f1f23; }
+    .feestatus-footer { padding: 8px 16px; font-size: 11px; color: #71717a; background: #18181b; border: 1px solid #27272a; border-top: none; border-radius: 0 0 10px 10px; }
+    .due-overdue { color: #f87171; }
+    .due-soon { color: #fbbf24; }
+    .due-ok { color: #4ade80; }
+    .msg-cell { font-size: 11px; color: #71717a; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+
+    .hidden { display: none !important; }
+    .sync-badge {
+      font-size: 10px; padding: 2px 8px; border-radius: 4px;
+      background: #065f4622; color: #4ade80;
+    }
+    .sync-badge.stale { background: #7f1d1d22; color: #f87171; }
+
+   .rem-cell { font-size: 11px; color: #71717a; white-space: nowrap; }
+.rem-arrow {
+  padding: 1px 4px; font-size: 10px; line-height: 1;
+  background: none; border: 1px solid #3f3f46; border-radius: 3px;
+  color: #71717a; cursor: pointer; vertical-align: middle;
+}
+.rem-arrow:hover { color: #e4e4e7; border-color: #6366f1; }
+.rem-text {
+  font-size: 11px; color: #a1a1aa; margin-left: 4px;
+}   
+    
+  </style>
+</head>
+<body>
+
+<!-- ─── Login ─── -->
+<div class="login-wrap" id="loginScreen">
+  <div class="login-panel">
+    <h2>Fee Status Dashboard</h2>
+    <p>Enter your name and access token</p>
+    <label>Name</label>
+    <input type="text" id="loginName" placeholder="Your name" autocomplete="off">
+    <label>Token (PAT + Key)</label>
+    <input type="password" id="loginToken" placeholder="Paste your token">
+    <button class="login-btn" id="loginBtn">Login</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ─── Setup ─── -->
+<div class="setup-wrap hidden" id="setupScreen">
+  <div class="setup-panel">
+    <div class="spinner"></div>
+    <div id="setupText">Connecting…</div>
+    <div class="status" id="setupStatus"></div>
+  </div>
+</div>
+
+<!-- ─── Main Table ─── -->
+<div class="feestatus-wrap hidden" id="mainScreen">
+  <div class="feestatus-toolbar">
+    <input type="text" id="filterText" placeholder="Filter: name, sid, course…">
+    <select id="filterStatus">
+      <option value="">All statuses</option>
+      <option value="overdue">Overdue</option>
+      <option value="soon">Due soon (≤7d)</option>
+      <option value="ok">On track</option>
+    </select>
+    <span class="sync-badge" id="syncBadge">Synced</span>
+    <span style="margin-left:auto; font-size:11px; color:#71717a;" id="rowCount"></span>
+  </div>
+  <div class="feestatus-scroll">
+    <table class="feestatus-table">
+      <thead><tr id="headerRow"></tr></thead>
+      <tbody id="bodyRows"></tbody>
+    </table>
+  </div>
+  <div class="feestatus-footer" id="footer"></div>
+</div>
+
+<script>
+// ─── Config ─────────────────────────────────────────────────────────────
+const GH_OWNER = "camdevelopers";
+const GH_REPO = "temp";
+const ENC_KEY_LEN = 64;
+
+// ─── State ──────────────────────────────────────────────────────────────
+let SQL = null;
+let db = null;
+let allData = [];
+let sortCol = null;
+let sortDir = 'asc';
+let maxFees = 0;
+let COLUMNS = [];
+
+// ─── Init sql.js ────────────────────────────────────────────────────────
+async function initSQL() {
+  SQL = await initSqlJs({
+    locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${file}`
+  });
+}
+
+// ─── Crypto Helpers ─────────────────────────────────────────────────────
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  return bytes;
+}
+
+async function decryptValue(encoded, encKey) {
+  if (!encoded || encoded.length < 24) return encoded;
+  try {
+    const raw = Uint8Array.from(atob(encoded), c => c.charCodeAt(0));
+    if (raw.length < 13) return encoded;
+    const key = await crypto.subtle.importKey('raw', hexToBytes(encKey), { name: 'AES-GCM' }, false, ['decrypt']);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.slice(0, 12) }, key, raw.slice(12));
+    return new TextDecoder().decode(pt);
+  } catch (e) {
+    console.warn('[decryptValue] failed:', encoded.slice(0, 40), '→', e.message);
+    return encoded;
+  }
+}
+
+async function decryptFile(encBytes, encKey) {
+  const key = await crypto.subtle.importKey('raw', hexToBytes(encKey), { name: 'AES-GCM' }, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: encBytes.slice(0, 12) }, key, encBytes.slice(12));
+  return new Uint8Array(pt);
+}
+
+// ─── GitHub API ─────────────────────────────────────────────────────────
+async function ghFetch(path, pat) {
+  const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`, {
+    headers: { 'Authorization': `token ${pat}`, 'Accept': 'application/vnd.github.v3+json' },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function ghListFiles(pat) {
+  const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/`, {
+    headers: { 'Authorization': `token ${pat}`, 'Accept': 'application/vnd.github.v3+json' },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+async function ghGetCommit(pat) {
+  const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/commits?per_page=1`, {
+    headers: { 'Authorization': `token ${pat}`, 'Accept': 'application/vnd.github.v3+json' },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data[0]?.sha || null;
+}
+
+async function ghDownloadFile(pat, path) {
+  const res = await fetch(
+    `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${path}`,
+    { headers: { 'Authorization': `token ${pat}`, 'Accept': 'application/vnd.github.v3.raw' } }
+  );
+  if (!res.ok) return null;
+  return new Uint8Array(await res.arrayBuffer());
+}
+
+// ─── IndexedDB (persistent DB storage) ──────────────────────────────────
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('feeDash', 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('kv')) {
+        d.createObjectStore('kv');
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e);
+  });
+}
+
+async function idbSet(key, value) {
+  const idb = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(value, key);
+    tx.oncomplete = resolve;
+    tx.onerror = reject;
+  });
+}
+
+async function idbGet(key) {
+  const idb = await openIDB();
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction('kv', 'readonly');
+    const req = tx.objectStore('kv').get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = reject;
+  });
+}
+
+// ─── SQL Helpers ────────────────────────────────────────────────────────
+const PK_MAP = { students: 'sid', enrollments: 'eid', fees: 'fid' };
+const SENSITIVE = ['name', 'email', 'phone'];
+
+async function applyChange(db, tableName, recordID, op, payloadJSON, encKey) {
+  let payload;
+  try { payload = JSON.parse(payloadJSON); } catch { return; }
+
+  for (const col of SENSITIVE) {
+    if (payload[col]) {
+      payload[col] = await decryptValue(payload[col], encKey);
+    }
+  }
+
+  const pk = PK_MAP[tableName];
+  if (!pk) return;
+
+  if (op === 'INSERT') {
+    const cols = Object.keys(payload);
+    const quoted = cols.map(c => `"${c}"`);
+    const placeholders = cols.map(() => '?').join(', ');
+    const values = cols.map(c => payload[c] ?? null);
+    try {
+      db.run(`INSERT OR REPLACE INTO ${tableName} (${quoted.join(', ')}) VALUES (${placeholders})`, values);
+    } catch (e) { console.error('INSERT failed:', e.message); }
+  } else if (op === 'UPDATE') {
+    const cols = Object.keys(payload);
+    const quoted = cols.map(c => `"${c}"`);
+    const sets = cols.map((c, i) => `${quoted[i]} = ?`).join(', ');
+    const values = [...cols.map(c => payload[c] ?? null), recordID];
+    try {
+      db.run(`UPDATE ${tableName} SET ${sets} WHERE "${pk}" = ?`, values);
+    } catch (e) { console.error('UPDATE failed:', e.message); }
+  }
+}
+
+function parseCSVLine(line) {
+  const fields = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { fields.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  fields.push(cur);
+  return fields;
+}
+
+// ─── Sync Logic ─────────────────────────────────────────────────────────
+async function doFullSync(pat, encKey) {
+  setStatus('Reading cycle info…');
+
+  const cycleData = await ghDownloadFile(pat, 'cycle.txt');
+  if (!cycleData) throw new Error('cycle.txt not found');
+  const cycle = parseInt(new TextDecoder().decode(cycleData).trim());
+
+  const logIDData = await ghDownloadFile(pat, 'latest_log_id.txt');
+  if (!logIDData) throw new Error('latest_log_id.txt not found');
+  const latestLogID = parseInt(new TextDecoder().decode(logIDData).trim());
+
+  setStatus(`Downloading DB snapshot (cycle ${cycle})…`);
+  const encDB = await ghDownloadFile(pat, `db_cycle_${cycle}.db.enc`);
+  if (!encDB) throw new Error(`db_cycle_${cycle}.db.enc not found`);
+
+  setStatus('Decrypting DB…');
+  const dbBytes = await decryptFile(encDB, encKey);
+
+  setStatus('Loading database…');
+  db = new SQL.Database(dbBytes);
+  await idbSet('db', db.export());
+  await idbSet('latest_log_id', latestLogID);
+  await idbSet('cycle', cycle);
+
+  await applyPendingCSVs(pat, encKey, latestLogID);
+}
+
+async function applyPendingCSVs(pat, encKey, startID) {
+  setStatus(`Checking for updates after log_id ${startID}…`);
+
+  const files = await ghListFiles(pat);
+  if (!files) return;
+
+  const csvFiles = files
+    .filter(f => f.name && f.name.startsWith('change_log_') && f.name.endsWith('.csv'))
+    .map(f => ({ name: f.name, id: parseInt(f.name.replace('change_log_', '').replace('.csv', '')) }))
+    .filter(f => f.id > startID)
+    .sort((a, b) => a.id - b.id);
+
+  if (csvFiles.length === 0) {
+    setStatus('No new updates.');
+    return;
+  }
+
+  let lastApplied = startID;
+  for (const file of csvFiles) {
+    setStatus(`Applying ${file.name}…`);
+    const csvData = await ghDownloadFile(pat, file.name);
+    if (!csvData) continue;
+
+    const text = new TextDecoder().decode(csvData);
+    const lines = text.split('\n').filter(l => l.trim());
+
+    for (let i = 1; i < lines.length; i++) {
+      const fields = parseCSVLine(lines[i]);
+      if (fields.length < 6) continue;
+      const [logID, tableName, recordID, op, payload, ts] = fields;
+      await applyChange(db, tableName, recordID, op, payload, encKey);
+      lastApplied = parseInt(logID);
+    }
+  }
+
+  if (lastApplied > startID) {
+    await idbSet('latest_log_id', lastApplied);
+    await idbSet('db', db.export());
+  }
+}
+
+async function doIncrementalSync(pat, encKey) {
+  const latestCommit = await ghGetCommit(pat);
+  const savedCommit = localStorage.getItem('last_commit');
+
+  if (latestCommit === savedCommit) {
+    setStatus('Loading local database…');
+    const dbBlob = await idbGet('db');
+    if (dbBlob) {
+      db = new SQL.Database(new Uint8Array(dbBlob));
+    }
+    return;
+  }
+
+  const cycleData = await ghDownloadFile(pat, 'cycle.txt');
+  if (!cycleData) throw new Error('cycle.txt not found');
+  const remoteCycle = parseInt(new TextDecoder().decode(cycleData).trim());
+  const localCycle = await idbGet('cycle') || 0;
+
+  if (remoteCycle > localCycle) {
+    await doFullSync(pat, encKey);
+  } else {
+    setStatus('Loading local database…');
+    const dbBlob = await idbGet('db');
+    if (!dbBlob) throw new Error('No local DB found. Please do a full sync.');
+    db = new SQL.Database(new Uint8Array(dbBlob));
+
+    const lastLogID = (await idbGet('latest_log_id')) || 0;
+    await applyPendingCSVs(pat, encKey, lastLogID);
+  }
+
+  localStorage.setItem('last_commit', latestCommit);
+}
+
+// ─── Table Rendering (dynamic fees) ─────────────────────────────────────
+function buildColumns() {
+  COLUMNS = [
+    { key: 'sid', label: 'SID' },
+    { key: 'name', label: 'Name' },
+    { key: 'eid', label: 'EID' },
+    { key: 'enrollDate', label: 'Enroll Date' },
+    { key: 'cid', label: 'Course' },
+    { key: 'courseFee', label: 'Course Fee' },
+    { key: 'scholarship', label: 'Scholarship' },
+  ];
+  for (let i = 1; i <= maxFees; i++) {
+    COLUMNS.push({ key: `fee${i}`, label: `Fee ${i}` });
+  }
+  COLUMNS.push(
+    { key: 'dueAmount', label: 'Due Amount' },
+    { key: 'dueDate', label: 'Due Date' },
+    { key: 'reminder', label: 'reminder' }
+  );
+}
+
+function calcDueAmount1(row) {
+  const feesSum = row.fees.reduce((a, b) => a + b, 0);
+  return (row.courseFee - row.scholarship) - feesSum;
+}
+
+function calcDueDate1(row) {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().split('T')[0];
+}
+
+function isVAL(eid) {
+  return eid && (eid.startsWith('MIM') || eid.startsWith('WIM'));
+}
+
+function daysBetween(dateStr1, dateStr2) {
+  const d1 = new Date(dateStr1);
+  const d2 = new Date(dateStr2);
+  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return 0;
+  return Math.floor((d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
+function calcDueAmount(row) {
+  const feesSum = row.fees.reduce((a, b) => a + b, 0);
+  if (isVAL(row.eid)) {
+    if (!row.enrollDate) return 0;
+    const today = new Date().toISOString().split('T')[0];
+    const days = daysBetween(row.enrollDate, today);
+    const periodFee = row.courseFee > 0
+      ? 5000 * (row.courseFee - row.scholarship) / row.courseFee
+      : 5000;
+    let due = Math.floor(days / 90) * periodFee + 1000 - feesSum;
+    return due < 0 ? 0 : due;
+  }
+  return (row.courseFee - row.scholarship) - feesSum;
+}
+
+function calcDueDate(row) {
+  const feesSum = row.fees.reduce((a, b) => a + b, 0);
+  const due = calcDueAmount(row);
+
+  if (isVAL(row.eid)) {
+    if (due <= 0) return '';
+    const periodFee = row.courseFee > 0
+      ? 5000 * (row.courseFee - row.scholarship) / row.courseFee
+      : 5000;
+    if (periodFee <= 0) return '';
+    if (!row.enrollDate) return '';
+    const d = new Date(row.enrollDate);
+    if (isNaN(d.getTime())) return '';
+    const periods = Math.max(0, Math.floor((feesSum - 1000) / periodFee));
+    d.setDate(d.getDate() + periods * 90);
+    return d.toISOString().split('T')[0];
+  }
+
+  if (due <= 0) return '';
+  return row.enrollDate || '';
+}
+function calcMessage(row, dueAmt, dueDt) {
+  if (dueAmt <= 0) return 'Fully paid';
+  const today = new Date().toISOString().split('T')[0];
+  if (dueDt < today) return `${row.name}: ₹${dueAmt.toFixed(0)} overdue`;
+  return `${row.name}: ₹${dueAmt.toFixed(0)} due by ${dueDt}`;
+}
+
+function loadTableData() {
+  const maxRes = db.exec(`SELECT COALESCE(MAX(cnt), 0) FROM (SELECT COUNT(*) as cnt FROM fees GROUP BY eid)`);
+  maxFees = maxRes.length ? maxRes[0].values[0][0] : 0;
+
+  let select = `s.sid, s.name, s.phone, e.eid, e.cid, e.date, e.scholarship_amount, e.reminder, c.course_fee`;
+  let joins = ``;
+  for (let i = 0; i < maxFees; i++) {
+    select += `, f${i + 1}.amount AS fee${i + 1}_amount`;
+    joins += `LEFT JOIN fees f${i + 1} ON f${i + 1}.eid = e.eid
+      AND f${i + 1}.fid = (SELECT fid FROM fees WHERE eid = e.eid ORDER BY fid LIMIT 1 OFFSET ${i})`;
+  }
+
+  const sql = `SELECT ${select}
+    FROM students s
+    LEFT JOIN enrollments e ON e.sid = s.sid
+    LEFT JOIN courses c ON c.name = e.cid
+    ${joins}
+    ORDER BY s.sid, e.eid`;
+
+  const res = db.exec(sql);
+  if (res.length === 0) { allData = []; return; }
+
+  const cols = res[0].columns;
+  allData = res[0].values.map(row => {
+    const obj = {};
+    cols.forEach((c, i) => { obj[c] = row[i]; });
+    const rowObj = {
+      sid: obj.sid || '',
+      name: obj.name || '',
+      phone: obj.phone || '',
+      eid: obj.eid || '',
+      cid: obj.cid || '',
+      enrollDate: obj.date || '',
+      scholarship: obj.scholarship_amount || 0,
+      courseFee: obj.course_fee || 0,
+      fees: [],
+      reminder: obj.reminder || '',
+    };
+    for (let i = 1; i <= maxFees; i++) {
+      rowObj.fees.push(obj[`fee${i}_amount`] || 0);
+    }
+    return rowObj;
+  });
+}
+
+function render(data) {
+  const hrow = document.getElementById('headerRow');
+  hrow.innerHTML = '';
+  COLUMNS.forEach(col => {
+    const th = document.createElement('th');
+    th.textContent = col.label;
+    th.addEventListener('click', () => sortBy(col.key));
+    if (sortCol === col.key) th.textContent += sortDir === 'asc' ? ' ▲' : ' ▼';
+    hrow.appendChild(th);
+  });
+
+  const tbody = document.getElementById('bodyRows');
+  tbody.innerHTML = '';
+  data.forEach(row => {
+    const tr = document.createElement('tr');
+    COLUMNS.forEach(col => {
+      const td = document.createElement('td');
+      if (col.key === 'dueAmount') {
+        const v = calcDueAmount(row);
+        td.textContent = v > 0 ? '₹' + v.toFixed(0) : '—';
+        td.className = v > 0 ? 'due-overdue' : 'due-ok';
+      } else if (col.key === 'dueDate') {
+        td.textContent = calcDueDate(row);
+ } else if (col.key === 'reminder') {
+  if (row.reminder) {
+    td.className = 'rem-cell';
+    const entries = row.reminder.trim().split(/\s+/);
+    let viewIdx = entries.length - 1;
+
+    const buildView = () => {
+      td.innerHTML = '';
+
+      if (viewIdx > 0) {
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'rem-arrow';
+        prevBtn.textContent = '◀';
+        prevBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          viewIdx--;
+          buildView();
+        });
+        td.appendChild(prevBtn);
+      }
+
+      const txt = document.createElement('span');
+      txt.className = 'rem-text';
+      txt.textContent = entries[viewIdx].replace('_', ' : ');   
+      td.appendChild(txt);
+
+      if (viewIdx < entries.length - 1) {
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'rem-arrow';
+        nextBtn.textContent = '▶';
+        nextBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          viewIdx++;
+          buildView();
+        });
+        td.appendChild(nextBtn);
+      }
+    };
+
+    buildView();
+  } else {
+    td.textContent = '—';
+  }
+}      else if (col.key.startsWith('fee')) {
+        const idx = parseInt(col.key.slice(3)) - 1;
+        const v = row.fees[idx] || 0;
+        td.textContent = v > 0 ? '₹' + v.toFixed(0) : '—';
+      } else {
+        td.textContent = row[col.key] != null ? row[col.key] : '';
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('rowCount').textContent = data.length + ' rows';
+  document.getElementById('footer').textContent = `${data.length} enrollments shown`;
+}
+
+function sortBy(key) {
+  sortDir = sortCol === key ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc';
+  sortCol = key;
+  applyFilters();
+}
+
+function applyFilters() {
+  const text = document.getElementById('filterText').value.toLowerCase();
+  const status = document.getElementById('filterStatus').value;
+
+  let filtered = allData.filter(row => {
+    if (text) {
+      const hay = (row.sid + ' ' + row.name + ' ' + row.cid + ' ' + row.eid).toLowerCase();
+      if (!hay.includes(text)) return false;
+    }
+    if (status) {
+      const dueAmt = calcDueAmount(row);
+      const dueDt = calcDueDate(row);
+      const today = new Date().toISOString().split('T')[0];
+      if (status === 'overdue' && !(dueAmt > 0 && dueDt < today)) return false;
+      if (status === 'ok' && !(dueAmt <= 0)) return false;
+    }
+    return true;
+  });
+
+  if (sortCol) {
+    filtered.sort((a, b) => {
+      let av, bv;
+      if (sortCol === 'dueAmount') { av = calcDueAmount(a); bv = calcDueAmount(b); }
+      else if (sortCol.startsWith('fee')) {
+        const idx = parseInt(sortCol.slice(3)) - 1;
+        av = a.fees[idx] || 0; bv = b.fees[idx] || 0;
+      }
+      else { av = a[sortCol]; bv = b[sortCol]; }
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      let cmp;
+      if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+      else cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }
+
+  render(filtered);
+}
+
+// ─── UI Helpers ─────────────────────────────────────────────────────────
+function setStatus(text) {
+  document.getElementById('setupText').textContent = text;
+}
+
+function showScreen(id) {
+  ['loginScreen', 'setupScreen', 'mainScreen'].forEach(s => {
+    document.getElementById(s).classList.toggle('hidden', s !== id);
+  });
+}
+
+// ─── Login ──────────────────────────────────────────────────────────────
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const name = document.getElementById('loginName').value.trim();
+  const token = document.getElementById('loginToken').value.trim();
+  const err = document.getElementById('loginError');
+
+  if (!name || !token) {
+    err.textContent = 'Both fields required.';
+    err.style.display = 'block';
+    return;
+  }
+
+  if (token.length < ENC_KEY_LEN + 36) {
+    err.textContent = 'Token too short. Expected PAT + 64-char key.';
+    err.style.display = 'block';
+    return;
+  }
+
+  const encKey = token.slice(-ENC_KEY_LEN);
+  const pat = token.slice(0, -ENC_KEY_LEN);
+
+  localStorage.setItem('user_name', name);
+  localStorage.setItem('gh_pat', pat);
+  localStorage.setItem('enc_key', encKey);
+
+  err.style.display = 'none';
+  document.getElementById('loginBtn').disabled = true;
+  showScreen('setupScreen');
+
+  try {
+    const commit = await ghGetCommit(pat);
+    if (!commit) throw new Error('Invalid PAT or repo not found.');
+    await runSetup(pat, encKey);
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = 'block';
+    showScreen('loginScreen');
+  }
+  document.getElementById('loginBtn').disabled = false;
+});
+
+// ─── Setup Orchestration ────────────────────────────────────────────────
+async function runSetup(pat, encKey) {
+  if (!SQL) await initSQL();
+
+  const savedCommit = localStorage.getItem('last_commit');
+  const hasLocalDB = !!(await idbGet('db'));
+
+  if (!savedCommit || !hasLocalDB) {
+    await doFullSync(pat, encKey);
+    localStorage.setItem('last_commit', await ghGetCommit(pat));
+  } else {
+    await doIncrementalSync(pat, encKey);
+  }
+
+  loadTableData();
+  buildColumns();
+  applyFilters();
+  showScreen('mainScreen');
+
+  document.getElementById('filterText').addEventListener('input', applyFilters);
+  document.getElementById('filterStatus').addEventListener('change', applyFilters);
+}
+
+// ─── Auto-login ─────────────────────────────────────────────────────────
+(async function checkAutoLogin() {
+  const pat = localStorage.getItem('gh_pat');
+  const encKey = localStorage.getItem('enc_key');
+  if (pat && encKey) {
+    showScreen('setupScreen');
+    try {
+      await runSetup(pat, encKey);
+    } catch (e) {
+      showScreen('loginScreen');
+      document.getElementById('loginError').textContent = e.message;
+      document.getElementById('loginError').style.display = 'block';
+    }
+  }
+})();
+
+// ─── Service Worker Registration ────────────────────────────────────────
+/*if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch((e) =>
+    console.warn('SW registration failed:', e)
+  );
+}*/
+</script>
+</body>
+</html>   
