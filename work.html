@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Office PWA</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <h2>Sign In</h2>
+  <input id="login-user" placeholder="Username" />
+  <input id="login-token" type="password" placeholder="GitHub PAT" />
+  <button id="login-btn">Sign In</button>
+  <p id="login-error"></p>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none">
+  <header>
+    <span id="sync-status">⏳ Syncing…</span>
+    <button id="refresh-btn">⟳</button>
+    <span id="user-label"></span>
+  </header>
+
+  <!-- Pages (toggled by router) -->
+<div id="page-dashboard" class="page">
+  <!-- Section 1: Attendance (current user) -->
+  <section id="sec-attendance" class="sec open">
+    <header class="sec-header" onclick="toggleSec(this)">
+      <span>🕐 My Attendance</span><span class="chevron">▾</span>
+    </header>
+    <div class="sec-body">
+      <div id="attendance-content"></div>
+    </div>
+  </section>
+
+  <!-- Section 2: Office Presence -->
+  <section id="sec-presence" class="sec open">
+    <header class="sec-header" onclick="toggleSec(this)">
+      <span>👥 Office Presence</span><span class="chevron">▾</span>
+    </header>
+    <div class="sec-body">
+      <div id="presence-content"></div>
+       <button class="btn-leave" onclick="showLeaveModal()">Request Leave</button>
+    </div>
+  </section>
+
+  <!-- Section 3: Missed Tasks -->
+  <section id="sec-missed" class="sec open">
+    <header class="sec-header" onclick="toggleSec(this)">
+      <span>⚠️ Missed Tasks</span><span class="chevron">▾</span>
+    </header>
+    <div class="sec-body">
+      <div id="missed-content"></div>
+    </div>
+  </section>
+
+  <!-- Section 4: Upcoming (today + 7d) -->
+  <section id="sec-upcoming" class="sec open">
+    <header class="sec-header" onclick="toggleSec(this)">
+      <span>📅 Upcoming</span><span class="chevron">▾</span>
+    </header>
+    <div class="sec-body">
+      <div id="upcoming-content"></div>
+    </div>
+  </section>
+
+  <!-- Section 5: Recurring (beyond 7d) -->
+  <section id="sec-recurring" class="sec">
+    <header class="sec-header" onclick="toggleSec(this)">
+      <span>🔄 Recurring</span><span class="chevron">▸</span>
+    </header>
+    <div class="sec-body" style="display:none">
+      <div id="recurring-content"></div>
+    </div>
+  </section>
+
+  <!-- Section 6: Notes -->
+  <section id="sec-notes" class="sec">
+    <header class="sec-header" onclick="toggleSec(this)">
+      <span>📝 Notes</span><span class="chevron">▸</span>
+    </header>
+    <div class="sec-body" style="display:none">
+      <div id="notes-content"></div>
+      <div class="note-publish">
+        <input id="note-input" placeholder="Write a note…" />
+        <button onclick="publishNote()">Post</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 7: Paused / Retired -->
+  <section id="sec-paused" class="sec">
+    <header class="sec-header" onclick="toggleSec(this)">
+      <span>⏸ Paused / Retired</span><span class="chevron">▸</span>
+    </header>
+    <div class="sec-body" style="display:none">
+      <div id="paused-content"></div>
+    </div>
+  </section>
+</div>   
+  <div id="page-task-create" class="page" style="display:none">
+  <h3>Create Task</h3>
+  <form id="task-form">
+    <label>Name</label>
+    <input id="tc-name" required placeholder="e.g. Water garden" />
+
+    <label>Type</label>
+    <select id="tc-type" required>
+      <option value="calendar">Calendar-anchored</option>
+      <option value="sequence">Sequence-based</option>
+      <option value="stock">Stock-threshold</option>
+      <option value="standalone">Standalone</option>
+    </select>
+
+    <div id="tc-recurrence-group">
+      <label>Recurrence</label>
+      <input id="tc-recurrence" placeholder="monthly / quarterly / annual / 2d / weekly:mon,wed" />
+    </div>
+
+    <div id="tc-threshold-group" style="display:none">
+      <label>Threshold (due when stock ≤ this)</label>
+      <input id="tc-threshold" type="number" min="0" />
+    </div>
+
+    <div id="tc-initial-stock-group" style="display:none">
+      <label>Initial stock</label>
+      <input id="tc-initial-stock" type="number" min="0" value="0" />
+    </div>
+
+    <div id="tc-deadline-group" style="display:none">
+      <label>Deadline (optional)</label>
+      <input id="tc-deadline" type="date" />
+    </div>
+
+    <label>Assigned to</label>
+    <input id="tc-assigned" placeholder="username" />
+
+    <label>Exempt days (comma-separated)</label>
+    <input id="tc-exempt" placeholder="sunday, holidays" />
+
+    <label>Grace (minutes)</label>
+    <input id="tc-grace" type="number" min="0" value="0" />
+
+    <label class="checkbox-label">
+      <input type="checkbox" id="tc-show-all" checked /> Show all instances on dashboard
+    </label>
+
+    <label class="checkbox-label">
+      <input type="checkbox" id="tc-track-time" /> Track duration
+    </label>
+
+    <button type="submit">Create Task</button>
+  </form>
+</div>   
+  <div id="page-task-detail" class="page" style="display:none">
+    <h3>Task Detail</h3>
+  </div>
+  <div id="page-maintenance" class="page" style="display:none">
+    <h3>Maintenance</h3>
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <button data-page="dashboard">Dashboard</button>
+    <button data-page="task-create">New Task</button>
+    <button data-page="maintenance">Admin</button>
+  </nav>
+</div>
+
+<script src="https://sql.js.org/dist/sql-wasm.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>   
