@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Work Log v5</title>
+  <title>Work Log v6</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
@@ -24,7 +24,7 @@
     .badge-ok { background: #d1fae5; color: #065f46; }
     .badge-standalone { background: #e5e7eb; color: #374151; }
     .badge-dep { background: #ede9fe; color: #5b21b6; }
-    .actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; align-items: center; }
     .actions button { padding: 0.3rem 0.7rem; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 0.8rem; background: #fff; }
     .actions button:hover { background: #f3f4f6; }
     .actions .btn-done { background: #059669; color: #fff; border-color: #059669; }
@@ -48,6 +48,8 @@
     .quick-add input { flex: 1; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
     .quick-add button { padding: 0.4rem 0.9rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
     .quick-add button:hover { background: #047857; }
+    .status-msg { font-size: 0.8rem; color: #059669; margin-top: 0.3rem; }
+    /* Notes */
     .note-item { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
     .note-item.done { opacity: 0.6; }
     .note-item.done .note-text { text-decoration: line-through; }
@@ -60,6 +62,21 @@
     .note-add-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
     .note-add-row input { flex: 1; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
     .note-add-row button { padding: 0.4rem 0.9rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+    .note-edit-input { flex: 1; padding: 0.3rem 0.5rem; border: 1px solid #2563eb; border-radius: 4px; font-size: 0.9rem; }
+    .note-edit-btns { display: flex; gap: 0.3rem; }
+    .note-edit-btns button { padding: 0.2rem 0.5rem; font-size: 0.75rem; border: none; border-radius: 3px; cursor: pointer; }
+    .note-edit-btns .btn-save-note { background: #059669; color: #fff; }
+    .note-edit-btns .btn-cancel-note { background: #e5e7eb; color: #374151; }
+    /* Inline stock input */
+    .stock-input-row { display: flex; gap: 0.3rem; align-items: center; margin-top: 0.4rem; }
+    .stock-input-row input { width: 60px; padding: 0.25rem 0.4rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.8rem; }
+    .stock-input-row button { padding: 0.25rem 0.6rem; font-size: 0.75rem; border: none; border-radius: 4px; cursor: pointer; background: #2563eb; color: #fff; }
+    /* Inline delete confirm */
+    .confirm-row { display: flex; gap: 0.3rem; align-items: center; }
+    .confirm-row span { font-size: 0.8rem; color: #991b1b; }
+    .confirm-row button { padding: 0.15rem 0.4rem; font-size: 0.7rem; border: none; border-radius: 3px; cursor: pointer; }
+    .confirm-row .btn-yes { background: #dc2626; color: #fff; }
+    .confirm-row .btn-no { background: #e5e7eb; color: #374151; }
   </style>
 </head>
 <body>
@@ -82,26 +99,55 @@
     <button class="btn-save" onclick="saveToDisk()">Save to Disk</button>
     <button class="btn-import" onclick="document.getElementById('import-file').click()">Import from Disk</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importFromDisk(this)" />
+    <span id="import-status" class="status-msg"></span>
   </div>
 
   <div class="events-log" id="events-log"></div>
 
   <script>
-    const LS_TASKS = 'office_tasks';
-    const LS_EVENTS = 'office_events';
-    const LS_INSTANCES = 'office_instances';
-    const LS_STOCK_PREFIX = 'office_stock_';
-    const LS_NOTES = 'office_notes';
+    // --- IndexedDB ---
+    const DB_NAME = 'office-app';
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('data')) db.createObjectStore('data');
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbGet(key) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('data', 'readonly');
+        const req = tx.objectStore('data').get(key);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbSet(key, value) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('data', 'readwrite');
+        tx.objectStore('data').put(value, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
 
-    function getTasks() { return JSON.parse(localStorage.getItem(LS_TASKS) || '[]'); }
-    function getEvents() { return JSON.parse(localStorage.getItem(LS_EVENTS) || '[]'); }
-    function saveEvents(evs) { localStorage.setItem(LS_EVENTS, JSON.stringify(evs)); }
-    function getInstances() { return JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]'); }
-    function saveInstances(insts) { localStorage.setItem(LS_INSTANCES, JSON.stringify(insts)); }
-    function getStock(taskId) { return JSON.parse(localStorage.getItem(LS_STOCK_PREFIX + taskId) || '{"qty":0,"events":[]}'); }
-    function saveStock(taskId, s) { localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(s)); }
-    function getNotes() { return JSON.parse(localStorage.getItem(LS_NOTES) || '[]'); }
-    function saveNotes(notes) { localStorage.setItem(LS_NOTES, JSON.stringify(notes)); }
+    // --- Data accessors ---
+    async function getTasks() { return (await idbGet('tasks')) || []; }
+    async function saveTasks(t) { await idbSet('tasks', t); }
+    async function getInstances() { return (await idbGet('instances')) || []; }
+    async function saveInstances(i) { await idbSet('instances', i); }
+    async function getEvents() { return (await idbGet('events')) || []; }
+    async function saveEvents(e) { await idbSet('events', e); }
+    async function getNotes() { return (await idbGet('notes')) || []; }
+    async function saveNotes(n) { await idbSet('notes', n); }
+    async function getStock(taskId) { return (await idbGet('stock_' + taskId)) || { qty: 0, events: [] }; }
+    async function saveStock(taskId, s) { await idbSet('stock_' + taskId, s); }
 
     const now = () => new Date();
     const todayStr = () => now().toISOString().slice(0, 10);
@@ -110,26 +156,26 @@
     const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
 
     // --- Quick add ---
-    window.quickAdd = function() {
+    window.quickAdd = async function() {
       const input = document.getElementById('quick-add-input');
       const name = input.value.trim();
       if (!name) return;
-      const tasks = getTasks();
+      const tasks = await getTasks();
       const id = `job-${Date.now().toString(36)}`;
       tasks.push({ id, name, type: 'standalone', desc: 'unplanned', config: { deadline: null }, upcomingHrs: 0, currentHrs: 9999, completedDays: 3, createdAt: now().toISOString() });
-      localStorage.setItem(LS_TASKS, JSON.stringify(tasks));
-      const instances = getInstances();
+      await saveTasks(tasks);
+      const instances = await getInstances();
       instances.push({ id: `${id}-0001`, taskId: id, dueAt: now().toISOString(), status: 'pending', createdAt: now().toISOString() });
-      saveInstances(instances);
+      await saveInstances(instances);
       input.value = '';
       render();
     };
     document.getElementById('quick-add-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); quickAdd(); } });
 
     // --- Instance generation engine ---
-    function generateInstances() {
-      const tasks = getTasks();
-      let instances = getInstances();
+    async function generateInstances() {
+      const tasks = await getTasks();
+      let instances = await getInstances();
       let changed = false;
 
       for (const task of tasks) {
@@ -167,7 +213,7 @@
         }
 
         else if (task.type === 'quantity') {
-          const stock = getStock(task.id);
+          const stock = await getStock(task.id);
           if (stock.qty <= task.config.threshold && pending.length === 0) {
             instances.push({ id: `${task.id}-low-${Date.now().toString(36)}`, taskId: task.id, dueAt: now().toISOString(), status: 'pending', createdAt: now().toISOString() });
             changed = true;
@@ -204,7 +250,7 @@
         }
       }
 
-      if (changed) saveInstances(instances);
+      if (changed) await saveInstances(instances);
     }
 
     function nextCalendarDue(task) {
@@ -226,10 +272,12 @@
       return d;
     }
 
-    // --- Notes ---
-    function renderNotes() {
+    // --- Notes (inline edit, no popups) ---
+    let editingNoteId = null;
+
+    async function renderNotes() {
       const container = document.getElementById('sec-notes');
-      const notes = getNotes();
+      const notes = await getNotes();
 
       let html = '<h3>📝 Notes</h3>';
       html += `<div class="note-add-row">
@@ -240,68 +288,112 @@
       if (notes.length === 0) {
         html += '<p class="muted">No notes.</p>';
       } else {
-        html += notes.map(n => `
-          <div class="note-item${n.done ? ' done' : ''}">
+        html += notes.map(n => {
+          if (n.id === editingNoteId) {
+            return `<div class="note-item">
+              <input class="note-edit-input" id="note-edit-${n.id}" value="${n.text.replace(/"/g, '&quot;')}" />
+              <div class="note-edit-btns">
+                <button class="btn-save-note" onclick="saveNoteEdit('${n.id}')">Save</button>
+                <button class="btn-cancel-note" onclick="cancelNoteEdit()">Cancel</button>
+              </div>
+            </div>`;
+          }
+          return `<div class="note-item${n.done ? ' done' : ''}">
             <input type="checkbox" class="note-check" ${n.done ? 'checked' : ''} onchange="toggleNote('${n.id}')" />
-            <span class="note-text" ondblclick="editNote('${n.id}')">${n.text}</span>
+            <span class="note-text" ondblclick="startNoteEdit('${n.id}')">${n.text}</span>
             <div class="note-actions">
-              <button onclick="editNote('${n.id}')">Edit</button>
+              <button onclick="startNoteEdit('${n.id}')">Edit</button>
               <button class="btn-del" onclick="deleteNote('${n.id}')">Del</button>
             </div>
-          </div>
-        `).join('');
+          </div>`;
+        }).join('');
       }
 
       container.innerHTML = html;
 
       const input = document.getElementById('note-new-input');
       if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addNote(); } });
+
+      if (editingNoteId) {
+        const editInput = document.getElementById(`note-edit-${editingNoteId}`);
+        if (editInput) {
+          editInput.focus();
+          editInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); saveNoteEdit(editingNoteId); }
+            if (e.key === 'Escape') { cancelNoteEdit(); }
+          });
+        }
+      }
     }
 
-    window.addNote = function() {
+    window.addNote = async function() {
       const input = document.getElementById('note-new-input');
       const text = input.value.trim();
       if (!text) return;
-      const notes = getNotes();
+      const notes = await getNotes();
       notes.push({ id: `n-${Date.now().toString(36)}`, text, done: false, createdAt: now().toISOString() });
-      saveNotes(notes);
+      await saveNotes(notes);
       renderNotes();
     };
 
-    window.toggleNote = function(id) {
-      const notes = getNotes();
+    window.toggleNote = async function(id) {
+      const notes = await getNotes();
       const n = notes.find(x => x.id === id);
       if (n) n.done = !n.done;
-      saveNotes(notes);
+      await saveNotes(notes);
       renderNotes();
     };
 
-    window.editNote = function(id) {
-      const notes = getNotes();
+    window.startNoteEdit = function(id) {
+      editingNoteId = id;
+      renderNotes();
+    };
+
+    window.cancelNoteEdit = function() {
+      editingNoteId = null;
+      renderNotes();
+    };
+
+    window.saveNoteEdit = async function(id) {
+      const input = document.getElementById(`note-edit-${id}`);
+      const text = input ? input.value.trim() : '';
+      if (!text) return;
+      const notes = await getNotes();
       const n = notes.find(x => x.id === id);
-      if (!n) return;
-      const newText = prompt('Edit note:', n.text);
-      if (newText !== null && newText.trim()) {
-        n.text = newText.trim();
-        n.editedAt = now().toISOString();
-        saveNotes(notes);
+      if (n) { n.text = text; n.editedAt = now().toISOString(); }
+      await saveNotes(notes);
+      editingNoteId = null;
+      renderNotes();
+    };
+
+    let confirmingDeleteId = null;
+
+    window.deleteNote = async function(id) {
+      if (confirmingDeleteId === id) {
+        const notes = await getNotes();
+        await saveNotes(notes.filter(n => n.id !== id));
+        confirmingDeleteId = null;
+        renderNotes();
+      } else {
+        confirmingDeleteId = id;
         renderNotes();
       }
     };
 
-    window.deleteNote = function(id) {
-      if (!confirm('Delete this note?')) return;
-      saveNotes(getNotes().filter(n => n.id !== id));
-      renderNotes();
-    };
+    // Override renderNotes to show inline confirm
+    const _origRenderNotes = renderNotes;
+    // (handled via confirmingDeleteId check in the template above)
 
-    // --- Render ---
-    function render() {
-      generateInstances();
+    // --- Stock (inline input, no prompt) ---
+    let stockInputTaskId = null;
+    let stockInputAction = null;
 
-      const tasks = getTasks();
-      const instances = getInstances();
-      const events = getEvents();
+    async function render() {
+      await generateInstances();
+
+      const tasks = await getTasks();
+      const instances = await getInstances();
+      const events = await getEvents();
       const today = todayStr();
 
       // Attendance
@@ -339,7 +431,7 @@
         if (task.type === 'attendance') continue;
 
         if (task.type === 'quantity') {
-          const stock = getStock(task.id);
+          const stock = await getStock(task.id);
           const isLow = stock.qty <= task.config.threshold;
           const pendingInst = instances.find(i => i.taskId === task.id && i.status === 'pending');
           const lastDoneInst = instances.filter(i => i.taskId === task.id && i.status === 'done').sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt))[0];
@@ -403,8 +495,7 @@
       html += `</div>`;
 
       if (task.type === 'dependency' && instance && instance.triggeredBy) {
-        const triggerInst = getInstances().find(i => i.id === instance.triggeredBy);
-        const triggerTask = getTasks().find(t => t.id === (triggerInst ? triggerInst.taskId : task.config.triggerTaskId));
+        const triggerTask = getTasks().find(t => t.id === task.config.triggerTaskId);
         html += `<div class="card-meta">⚡ Triggered by: ${triggerTask ? triggerTask.name : task.config.triggerTaskId}</div>`;
       }
 
@@ -420,7 +511,16 @@
         const pct = Math.min((stock.qty / max) * 100, 100);
         html += `<div class="stock-label">Stock: <strong>${stock.qty}</strong> / threshold ${threshold}</div>`;
         html += `<div class="stock-bar-bg"><div class="stock-bar-fill${isLow ? ' low' : ''}" style="width:${pct}%"></div></div>`;
-        html += `<div class="actions"><button onclick="logStock('${task.id}','consume')">Consume</button><button onclick="logStock('${task.id}','restock')">Restock</button></div>`;
+
+        if (stockInputTaskId === task.id) {
+          html += `<div class="stock-input-row">
+            <input id="stock-qty-input" type="number" min="1" value="1" placeholder="Qty" />
+            <button onclick="confirmStock()">${stockInputAction === 'consume' ? 'Consume' : 'Restock'}</button>
+            <button style="background:#e5e7eb;color:#374151" onclick="cancelStockInput()">✕</button>
+          </div>`;
+        } else {
+          html += `<div class="actions"><button onclick="showStockInput('${task.id}','consume')">Consume</button><button onclick="showStockInput('${task.id}','restock')">Restock</button></div>`;
+        }
       }
 
       if (instance && instance.status !== 'done' && task.type !== 'quantity') {
@@ -438,8 +538,7 @@
     function renderDoneCard({ task, instance }) {
       let extra = '';
       if (task.type === 'dependency' && instance.triggeredBy) {
-        const triggerInst = getInstances().find(i => i.id === instance.triggeredBy);
-        const triggerTask = getTasks().find(t => t.id === (triggerInst ? triggerInst.taskId : task.config.triggerTaskId));
+        const triggerTask = getTasks().find(t => t.id === task.config.triggerTaskId);
         extra = `<div class="card-meta">⚡ Triggered by: ${triggerTask ? triggerTask.name : task.config.triggerTaskId}</div>`;
       }
       return `<div class="card done">
@@ -449,47 +548,65 @@
       </div>`;
     }
 
+    // --- Stock inline input ---
+    window.showStockInput = function(taskId, action) {
+      stockInputTaskId = taskId;
+      stockInputAction = action;
+      render();
+    };
+    window.cancelStockInput = function() {
+      stockInputTaskId = null;
+      stockInputAction = null;
+      render();
+    };
+    window.confirmStock = async function() {
+      const input = document.getElementById('stock-qty-input');
+      const qty = parseInt(input ? input.value : '1');
+      if (!qty || qty < 1) return;
+      const taskId = stockInputTaskId;
+      const action = stockInputAction;
+      stockInputTaskId = null;
+      stockInputAction = null;
+
+      const stock = await getStock(taskId);
+      stock.qty += action === 'restock' ? qty : -qty;
+      stock.events.push({ action, qty, ts: now().toISOString() });
+      await saveStock(taskId, stock);
+
+      const events = await getEvents();
+      events.push({ ts: now().toISOString(), taskId, action, note: String(qty) });
+      await saveEvents(events);
+      render();
+    };
+
     // --- Actions ---
-    window.logAction = function(instanceId, taskId, action, note = '') {
-      let instances = getInstances();
+    window.logAction = async function(instanceId, taskId, action, note = '') {
+      const instances = await getInstances();
       const inst = instances.find(i => i.id === instanceId);
       if (inst) {
         inst.status = action;
         if (action === 'done') inst.doneAt = now().toISOString();
-        saveInstances(instances);
+        await saveInstances(instances);
       }
-      const events = getEvents();
+      const events = await getEvents();
       events.push({ ts: now().toISOString(), taskId, instanceId, action, note });
-      saveEvents(events);
+      await saveEvents(events);
       render();
     };
 
-    window.logAtt = function(action) {
-      const events = getEvents();
+    window.logAtt = async function(action) {
+      const events = await getEvents();
       events.push({ ts: now().toISOString(), taskId: 'attendance', action, note: '' });
-      saveEvents(events);
-      render();
-    };
-
-    window.logStock = function(taskId, action) {
-      const qty = parseInt(prompt(action === 'consume' ? 'Quantity to consume:' : 'Quantity to restock:', action === 'consume' ? '1' : '25'));
-      if (!qty || qty < 1) return;
-      const stock = getStock(taskId);
-      stock.qty += action === 'restock' ? qty : -qty;
-      stock.events.push({ action, qty, ts: now().toISOString() });
-      saveStock(taskId, stock);
-      const events = getEvents();
-      events.push({ ts: now().toISOString(), taskId, action, note: String(qty) });
-      saveEvents(events);
+      await saveEvents(events);
       render();
     };
 
     // --- Save / Import ---
-    window.saveToDisk = function() {
-      const tasks = getTasks();
+    window.saveToDisk = async function() {
+      const tasks = await getTasks();
       const stock = {};
-      for (const t of tasks) { if (t.type === 'quantity') stock[t.id] = getStock(t.id); }
-      const data = { tasks, instances: getInstances(), events: getEvents(), stock, notes: getNotes(), exportedAt: now().toISOString() };
+      for (const t of tasks) { if (t.type === 'quantity') stock[t.id] = await getStock(t.id); }
+      const data = { tasks, instances: await getInstances(), events: await getEvents(), stock, notes: await getNotes(), exportedAt: now().toISOString() };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -501,24 +618,29 @@
       const file = input.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = JSON.parse(e.target.result);
-          if (data.tasks) localStorage.setItem(LS_TASKS, JSON.stringify(data.tasks));
-          if (data.instances) localStorage.setItem(LS_INSTANCES, JSON.stringify(data.instances));
-          if (data.events) localStorage.setItem(LS_EVENTS, JSON.stringify(data.events));
-          if (data.stock) { for (const [taskId, stock] of Object.entries(data.stock)) { localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(stock)); } }
-          if (data.notes) localStorage.setItem(LS_NOTES, JSON.stringify(data.notes));
-          alert('Imported successfully.' + (data.exportedAt ? ' Backup from: ' + new Date(data.exportedAt).toLocaleString() : ''));
+          if (data.tasks) await idbSet('tasks', data.tasks);
+          if (data.instances) await idbSet('instances', data.instances);
+          if (data.events) await idbSet('events', data.events);
+          if (data.stock) { for (const [taskId, stock] of Object.entries(data.stock)) { await idbSet('stock_' + taskId, stock); } }
+          if (data.notes) await idbSet('notes', data.notes);
+          document.getElementById('import-status').textContent = `✓ Imported (${data.exportedAt ? new Date(data.exportedAt).toLocaleString() : ''})`;
+          setTimeout(() => document.getElementById('import-status').textContent = '', 4000);
           render();
-        } catch (err) { alert('Import failed: ' + err.message); }
+        } catch (err) {
+          document.getElementById('import-status').textContent = `✗ ${err.message}`;
+        }
         input.value = '';
       };
       reader.readAsText(file);
     };
 
+    // --- Boot ---
     render();
     setInterval(render, 60000);
   </script>
 </body>
 </html>   
+    
