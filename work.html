@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Work Log</title>
+  <title>Work Log v5</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
@@ -48,6 +48,18 @@
     .quick-add input { flex: 1; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
     .quick-add button { padding: 0.4rem 0.9rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
     .quick-add button:hover { background: #047857; }
+    .note-item { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
+    .note-item.done { opacity: 0.6; }
+    .note-item.done .note-text { text-decoration: line-through; }
+    .note-check { width: 20px; height: 20px; margin-top: 2px; cursor: pointer; accent-color: #059669; }
+    .note-text { flex: 1; font-size: 0.9rem; }
+    .note-actions { display: flex; gap: 0.3rem; }
+    .note-actions button { padding: 0.15rem 0.4rem; font-size: 0.7rem; border: 1px solid #d1d5db; border-radius: 3px; cursor: pointer; background: #fff; }
+    .note-actions button:hover { background: #f3f4f6; }
+    .note-actions .btn-del { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .note-add-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .note-add-row input { flex: 1; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
+    .note-add-row button { padding: 0.4rem 0.9rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
   </style>
 </head>
 <body>
@@ -63,6 +75,7 @@
   <div id="sec-current"></div>
   <div id="sec-upcoming"></div>
   <div id="sec-completed"></div>
+  <div id="sec-notes"></div>
 
   <div class="btn-row">
     <a href="tasks.html">→ Manage Tasks</a>
@@ -78,6 +91,7 @@
     const LS_EVENTS = 'office_events';
     const LS_INSTANCES = 'office_instances';
     const LS_STOCK_PREFIX = 'office_stock_';
+    const LS_NOTES = 'office_notes';
 
     function getTasks() { return JSON.parse(localStorage.getItem(LS_TASKS) || '[]'); }
     function getEvents() { return JSON.parse(localStorage.getItem(LS_EVENTS) || '[]'); }
@@ -86,6 +100,8 @@
     function saveInstances(insts) { localStorage.setItem(LS_INSTANCES, JSON.stringify(insts)); }
     function getStock(taskId) { return JSON.parse(localStorage.getItem(LS_STOCK_PREFIX + taskId) || '{"qty":0,"events":[]}'); }
     function saveStock(taskId, s) { localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(s)); }
+    function getNotes() { return JSON.parse(localStorage.getItem(LS_NOTES) || '[]'); }
+    function saveNotes(notes) { localStorage.setItem(LS_NOTES, JSON.stringify(notes)); }
 
     const now = () => new Date();
     const todayStr = () => now().toISOString().slice(0, 10);
@@ -186,8 +202,6 @@
             }
           }
         }
-
-        // standalone: instance created at task creation, no auto-generation
       }
 
       if (changed) saveInstances(instances);
@@ -211,6 +225,75 @@
       }
       return d;
     }
+
+    // --- Notes ---
+    function renderNotes() {
+      const container = document.getElementById('sec-notes');
+      const notes = getNotes();
+
+      let html = '<h3>📝 Notes</h3>';
+      html += `<div class="note-add-row">
+        <input id="note-new-input" placeholder="Add a note…" />
+        <button onclick="addNote()">Add</button>
+      </div>`;
+
+      if (notes.length === 0) {
+        html += '<p class="muted">No notes.</p>';
+      } else {
+        html += notes.map(n => `
+          <div class="note-item${n.done ? ' done' : ''}">
+            <input type="checkbox" class="note-check" ${n.done ? 'checked' : ''} onchange="toggleNote('${n.id}')" />
+            <span class="note-text" ondblclick="editNote('${n.id}')">${n.text}</span>
+            <div class="note-actions">
+              <button onclick="editNote('${n.id}')">Edit</button>
+              <button class="btn-del" onclick="deleteNote('${n.id}')">Del</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      container.innerHTML = html;
+
+      const input = document.getElementById('note-new-input');
+      if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addNote(); } });
+    }
+
+    window.addNote = function() {
+      const input = document.getElementById('note-new-input');
+      const text = input.value.trim();
+      if (!text) return;
+      const notes = getNotes();
+      notes.push({ id: `n-${Date.now().toString(36)}`, text, done: false, createdAt: now().toISOString() });
+      saveNotes(notes);
+      renderNotes();
+    };
+
+    window.toggleNote = function(id) {
+      const notes = getNotes();
+      const n = notes.find(x => x.id === id);
+      if (n) n.done = !n.done;
+      saveNotes(notes);
+      renderNotes();
+    };
+
+    window.editNote = function(id) {
+      const notes = getNotes();
+      const n = notes.find(x => x.id === id);
+      if (!n) return;
+      const newText = prompt('Edit note:', n.text);
+      if (newText !== null && newText.trim()) {
+        n.text = newText.trim();
+        n.editedAt = now().toISOString();
+        saveNotes(notes);
+        renderNotes();
+      }
+    };
+
+    window.deleteNote = function(id) {
+      if (!confirm('Delete this note?')) return;
+      saveNotes(getNotes().filter(n => n.id !== id));
+      renderNotes();
+    };
 
     // --- Render ---
     function render() {
@@ -283,6 +366,7 @@
       document.getElementById('sec-current').innerHTML = renderSection('📋 Current', current, renderCard);
       document.getElementById('sec-upcoming').innerHTML = renderSection('📅 Upcoming', upcoming, renderCard);
       document.getElementById('sec-completed').innerHTML = renderSection('✅ Completed', completed, renderDoneCard);
+      renderNotes();
 
       const logContainer = document.getElementById('events-log');
       if (events.length > 0) {
@@ -405,7 +489,7 @@
       const tasks = getTasks();
       const stock = {};
       for (const t of tasks) { if (t.type === 'quantity') stock[t.id] = getStock(t.id); }
-      const data = { tasks, instances: getInstances(), events: getEvents(), stock, exportedAt: now().toISOString() };
+      const data = { tasks, instances: getInstances(), events: getEvents(), stock, notes: getNotes(), exportedAt: now().toISOString() };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -424,6 +508,7 @@
           if (data.instances) localStorage.setItem(LS_INSTANCES, JSON.stringify(data.instances));
           if (data.events) localStorage.setItem(LS_EVENTS, JSON.stringify(data.events));
           if (data.stock) { for (const [taskId, stock] of Object.entries(data.stock)) { localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(stock)); } }
+          if (data.notes) localStorage.setItem(LS_NOTES, JSON.stringify(data.notes));
           alert('Imported successfully.' + (data.exportedAt ? ' Backup from: ' + new Date(data.exportedAt).toLocaleString() : ''));
           render();
         } catch (err) { alert('Import failed: ' + err.message); }
