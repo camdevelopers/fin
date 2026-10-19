@@ -8,6 +8,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
     h2 { margin-bottom: 1rem; }
+    h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
     label { display: block; font-size: 0.85rem; color: #374151; margin-top: 0.75rem; }
     input, select { width: 100%; padding: 0.5rem; margin-top: 0.2rem; border: 1px solid #d1d5db; border-radius: 4px; }
     .type-group { margin-top: 0.75rem; padding: 0.75rem; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
@@ -16,11 +17,18 @@
     button:hover { background: #047857; }
     .task-list { margin-top: 1.5rem; }
     .task-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
-    .task-row .info { display: flex; align-items: center; gap: 0.5rem; }
+    .task-row .info { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .task-row .badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 3px; background: #dbeafe; color: #1e40af; }
     .task-row button { padding: 0.25rem 0.6rem; font-size: 0.8rem; background: #fee2e2; color: #991b1b; margin: 0; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
     a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+    .muted { color: #6b7280; font-size: 0.85rem; }
+    .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+    .btn-row button { margin-top: 0; }
+    .btn-import { background: #2563eb; }
+    .btn-import:hover { background: #1d4ed8; }
+    .btn-save { background: #7c3aed; }
+    .btn-save:hover { background: #6d28d9; }
   </style>
 </head>
 <body>
@@ -71,7 +79,7 @@
     <div id="g-qty" class="type-group hidden">
       <div class="grid2">
         <div>
-          <label>Threshold (due when ≤)</label>
+          <label>Threshold (due when stock ≤)</label>
           <input id="qty-threshold" type="number" min="0" value="5" />
         </div>
         <div>
@@ -81,12 +89,12 @@
       </div>
     </div>
 
-    <!-- Attendance: no extra fields -->
+    <!-- Attendance -->
     <div id="g-att" class="type-group hidden">
-      <p class="muted" style="font-size:0.85rem;color:#6b7280">Daily check-in/check-out. No extra config needed.</p>
+      <p class="muted">Daily check-in/check-out. No extra config needed.</p>
     </div>
 
-    <!-- Display timing (applies to all types) -->
+    <!-- Display timing -->
     <div class="type-group" style="margin-top:1rem">
       <p style="font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">Display Timing</p>
       <div class="grid2">
@@ -106,21 +114,24 @@
     <button type="submit">Create Task</button>
   </form>
 
-  <a href="work.html">→ Go to Work Log</a>
+  <div class="btn-row">
+    <a href="work.html" style="align-self:center">→ Go to Work Log</a>
+    <button class="btn-save" onclick="saveToDisk()">Save to Disk</button>
+    <button class="btn-import" onclick="document.getElementById('import-file').click()">Import from Disk</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importFromDisk(this)" />
+  </div>
 
   <div class="task-list" id="task-list"></div>
 
   <script>
     const LS_KEY = 'office_tasks';
+    const LS_EVENTS = 'office_events';
+    const LS_INSTANCES = 'office_instances';
+    const LS_STOCK_PREFIX = 'office_stock_';
 
-    function getTasks() {
-      return JSON.parse(localStorage.getItem(LS_KEY) || '[]');
-    }
-    function saveTasks(tasks) {
-      localStorage.setItem(LS_KEY, JSON.stringify(tasks));
-    }
+    function getTasks() { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
+    function saveTasks(tasks) { localStorage.setItem(LS_KEY, JSON.stringify(tasks)); }
 
-    // Type-aware show/hide
     const typeSelect = document.getElementById('tc-type');
     const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', attendance: 'g-att' };
     function updateGroups() {
@@ -131,17 +142,17 @@
     typeSelect.addEventListener('change', updateGroups);
     updateGroups();
 
-    // Render existing tasks
     function renderList() {
       const tasks = getTasks();
       const container = document.getElementById('task-list');
-      if (tasks.length === 0) { container.innerHTML = '<p style="color:#6b7280;margin-top:1rem">No tasks yet.</p>'; return; }
-      container.innerHTML = '<h3 style="margin-top:1.5rem">Existing Tasks</h3>' + tasks.map(t => `
+      if (tasks.length === 0) { container.innerHTML = '<h3>Existing Tasks</h3><p class="muted">No tasks yet.</p>'; return; }
+      container.innerHTML = '<h3>Existing Tasks</h3>' + tasks.map(t => `
         <div class="task-row">
           <div class="info">
             <strong>${t.name}</strong>
             <span class="badge">${t.type}</span>
-            <span style="font-size:0.8rem;color:#6b7280">${t.desc}</span>
+            <span class="muted">${t.desc}</span>
+            <span class="muted" style="font-size:0.7rem">up:${t.upcomingHrs}h cur:${t.currentHrs}h done:${t.completedDays}d</span>
           </div>
           <button onclick="delTask('${t.id}')">Delete</button>
         </div>
@@ -149,12 +160,10 @@
     }
 
     window.delTask = function(id) {
-      let tasks = getTasks().filter(t => t.id !== id);
-      saveTasks(tasks);
+      saveTasks(getTasks().filter(t => t.id !== id));
       renderList();
     };
 
-    // Form submit
     document.getElementById('task-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const name = document.getElementById('tc-name').value.trim();
@@ -163,8 +172,7 @@
       const currentHrs = parseInt(document.getElementById('tc-current-hrs').value) || 24;
       const completedDays = parseInt(document.getElementById('tc-completed-days').value) || 7;
 
-      let desc = '';
-      let config = {};
+      let desc = '', config = {};
 
       if (type === 'sequence') {
         const n = parseInt(document.getElementById('seq-n').value) || 1;
@@ -187,7 +195,7 @@
       }
 
       const task = {
-        id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
         name, type, desc, config,
         upcomingHrs, currentHrs, completedDays,
         createdAt: new Date().toISOString()
@@ -197,10 +205,8 @@
       tasks.push(task);
       saveTasks(tasks);
 
-      // If quantity, init stock
       if (type === 'quantity' && config.initial > 0) {
-        const stockKey = `office_stock_${task.id}`;
-        localStorage.setItem(stockKey, JSON.stringify({ qty: config.initial, events: [{ action: 'restock', qty: config.initial, ts: new Date().toISOString() }] }));
+        localStorage.setItem(LS_STOCK_PREFIX + task.id, JSON.stringify({ qty: config.initial, events: [{ action: 'restock', qty: config.initial, ts: new Date().toISOString() }] }));
       }
 
       e.target.reset();
@@ -208,14 +214,49 @@
       renderList();
     });
 
-    // Save to disk (download JSON)
     window.saveToDisk = function() {
-      const data = { tasks: getTasks(), events: JSON.parse(localStorage.getItem('office_events') || '[]') };
+      const tasks = getTasks();
+      const stock = {};
+      for (const t of tasks) {
+        if (t.type === 'quantity') stock[t.id] = JSON.parse(localStorage.getItem(LS_STOCK_PREFIX + t.id) || '{"qty":0,"events":[]}');
+      }
+      const data = {
+        tasks,
+        instances: JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]'),
+        events: JSON.parse(localStorage.getItem(LS_EVENTS) || '[]'),
+        stock,
+        exportedAt: new Date().toISOString()
+      };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `office_backup_${new Date().toISOString().slice(0,10)}.json`;
       a.click();
+    };
+
+    window.importFromDisk = function(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.tasks) localStorage.setItem(LS_KEY, JSON.stringify(data.tasks));
+          if (data.instances) localStorage.setItem(LS_INSTANCES, JSON.stringify(data.instances));
+          if (data.events) localStorage.setItem(LS_EVENTS, JSON.stringify(data.events));
+          if (data.stock) {
+            for (const [taskId, stock] of Object.entries(data.stock)) {
+              localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(stock));
+            }
+          }
+          alert('Imported successfully.' + (data.exportedAt ? ' Backup from: ' + new Date(data.exportedAt).toLocaleString() : ''));
+          renderList();
+        } catch (err) {
+          alert('Import failed: ' + err.message);
+        }
+        input.value = '';
+      };
+      reader.readAsText(file);
     };
 
     renderList();
