@@ -23,7 +23,7 @@
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
     a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
     .muted { color: #6b7280; font-size: 0.85rem; }
-    .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+    .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; align-items: center; }
     .btn-row button { margin-top: 0; }
     .btn-import { background: #2563eb; }
     .btn-import:hover { background: #1d4ed8; }
@@ -43,6 +43,7 @@
       <option value="sequence">Sequence (every N hours/days)</option>
       <option value="calendar">Calendar (day-based)</option>
       <option value="quantity">Quantity (stock threshold)</option>
+      <option value="standalone">Standalone (one-time)</option>
       <option value="attendance">Attendance</option>
     </select>
 
@@ -89,6 +90,12 @@
       </div>
     </div>
 
+    <!-- Standalone -->
+    <div id="g-standalone" class="type-group hidden">
+      <label>Deadline (optional — leave blank for "due now")</label>
+      <input id="standalone-deadline" type="datetime-local" />
+    </div>
+
     <!-- Attendance -->
     <div id="g-att" class="type-group hidden">
       <p class="muted">Daily check-in/check-out. No extra config needed.</p>
@@ -133,7 +140,7 @@
     function saveTasks(tasks) { localStorage.setItem(LS_KEY, JSON.stringify(tasks)); }
 
     const typeSelect = document.getElementById('tc-type');
-    const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', attendance: 'g-att' };
+    const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', standalone: 'g-standalone', attendance: 'g-att' };
     function updateGroups() {
       for (const [type, id] of Object.entries(groups)) {
         document.getElementById(id).classList.toggle('hidden', typeSelect.value !== type);
@@ -189,6 +196,10 @@
         const initial = parseInt(document.getElementById('qty-initial').value) || 0;
         desc = `threshold ${threshold}, initial ${initial}`;
         config = { threshold, initial };
+      } else if (type === 'standalone') {
+        const deadline = document.getElementById('standalone-deadline').value;
+        desc = deadline ? `due ${new Date(deadline).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'due now';
+        config = { deadline: deadline || null };
       } else if (type === 'attendance') {
         desc = 'daily check-in/out';
         config = {};
@@ -205,8 +216,23 @@
       tasks.push(task);
       saveTasks(tasks);
 
+      // Stock: init
       if (type === 'quantity' && config.initial > 0) {
         localStorage.setItem(LS_STOCK_PREFIX + task.id, JSON.stringify({ qty: config.initial, events: [{ action: 'restock', qty: config.initial, ts: new Date().toISOString() }] }));
+      }
+
+      // Standalone: create instance immediately
+      if (type === 'standalone') {
+        let instances = JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]');
+        const dueAt = config.deadline ? new Date(config.deadline).toISOString() : new Date().toISOString();
+        instances.push({
+          id: `${task.id}-0001`,
+          taskId: task.id,
+          dueAt,
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        });
+        localStorage.setItem(LS_INSTANCES, JSON.stringify(instances));
       }
 
       e.target.reset();
