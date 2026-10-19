@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -156,6 +157,7 @@
     const LS_EVENTS = 'office_events';
     const LS_INSTANCES = 'office_instances';
     const LS_STOCK_PREFIX = 'office_stock_';
+    const LS_NOTES = 'office_notes';
 
     function getTasks() { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
     function saveTasks(tasks) { localStorage.setItem(LS_KEY, JSON.stringify(tasks)); }
@@ -290,6 +292,7 @@
         instances: JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]'),
         events: JSON.parse(localStorage.getItem(LS_EVENTS) || '[]'),
         stock,
+        notes: JSON.parse(localStorage.getItem(LS_NOTES) || '[]'),
         exportedAt: new Date().toISOString()
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -314,6 +317,7 @@
               localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(stock));
             }
           }
+          if (data.notes) localStorage.setItem(LS_NOTES, JSON.stringify(data.notes));
           alert('Imported successfully.' + (data.exportedAt ? ' Backup from: ' + new Date(data.exportedAt).toLocaleString() : ''));
           renderList();
         } catch (err) { alert('Import failed: ' + err.message); }
@@ -325,4 +329,8 @@
     renderList();
   </script>
 </body>
-</html>   
+</html>
+```
+
+No changes from the last version I gave — `tasks.html` was already final. The only addition is `LS_NOTES` in the save/import so notes round-trip correctly.
+
