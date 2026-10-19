@@ -88,24 +88,28 @@
         const lastDone = taskInstances.filter(i => i.status === 'done').sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt))[0];
         const pending = taskInstances.filter(i => i.status === 'pending' || i.status === 'doing' || i.status === 'will_do');
 
-        if (task.type === 'sequence') {
-          // Next due = lastDone + interval (or now if never done)
-          let anchor = lastDone ? new Date(lastDone.doneAt) : new Date(task.createdAt);
-          const next = new Date(anchor);
-          if (task.config.unit === 'hours') next.setHours(next.getHours() + task.config.n);
-          else next.setDate(next.getDate() + task.config.n);
+if (task.type === 'sequence') {
+  let next;
+  if (lastDone) {
+    next = new Date(lastDone.doneAt);
+    if (task.config.unit === 'hours') next.setHours(next.getHours() + task.config.n);
+    else next.setDate(next.getDate() + task.config.n);
+  } else {
+    // First instance: due immediately
+    next = new Date();
+  }
 
-          if (pending.length === 0 && next <= now()) {
-            instances.push({
-              id: `${task.id}-${Date.now().toString(36)}`,
-              taskId: task.id,
-              dueAt: next.toISOString(),
-              status: 'pending',
-              createdAt: now().toISOString()
-            });
-            changed = true;
-          }
-        }
+  if (pending.length === 0 && next <= hrsFromNow(task.upcomingHrs + 1)) {
+    instances.push({
+      id: `${task.id}-${next.toISOString().slice(0,10)}-${next.getHours()}`,
+      taskId: task.id,
+      dueAt: next.toISOString(),
+      status: 'pending',
+      createdAt: now().toISOString()
+    });
+    changed = true;
+  }
+}
 
         else if (task.type === 'calendar') {
           // Next due = day X of current/next month (or quarter/year)
