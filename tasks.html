@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,6 +29,7 @@
     .btn-import:hover { background: #1d4ed8; }
     .btn-save { background: #7c3aed; }
     .btn-save:hover { background: #6d28d9; }
+    .status-msg { font-size: 0.8rem; color: #059669; margin-top: 0.3rem; }
   </style>
 </head>
 <body>
@@ -49,98 +49,58 @@
       <option value="attendance">Attendance</option>
     </select>
 
-    <!-- Sequence -->
     <div id="g-seq" class="type-group hidden">
       <div class="grid2">
-        <div>
-          <label>Interval</label>
-          <input id="seq-n" type="number" min="1" value="2" />
-        </div>
-        <div>
-          <label>Unit</label>
-          <select id="seq-unit">
-            <option value="days">Days</option>
-            <option value="hours">Hours</option>
-          </select>
-        </div>
+        <div><label>Interval</label><input id="seq-n" type="number" min="1" value="2" /></div>
+        <div><label>Unit</label><select id="seq-unit"><option value="days">Days</option><option value="hours">Hours</option></select></div>
       </div>
     </div>
 
-    <!-- Calendar -->
     <div id="g-cal" class="type-group hidden">
       <label>On which day of month?</label>
       <input id="cal-day" type="number" min="1" max="31" value="5" />
       <label>Repeat</label>
-      <select id="cal-repeat">
-        <option value="monthly">Monthly</option>
-        <option value="quarterly">Quarterly</option>
-        <option value="annual">Annual</option>
-      </select>
+      <select id="cal-repeat"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select>
     </div>
 
-    <!-- Quantity -->
     <div id="g-qty" class="type-group hidden">
       <div class="grid2">
-        <div>
-          <label>Threshold (due when stock ≤)</label>
-          <input id="qty-threshold" type="number" min="0" value="5" />
-        </div>
-        <div>
-          <label>Initial stock</label>
-          <input id="qty-initial" type="number" min="0" value="25" />
-        </div>
+        <div><label>Threshold (due when stock ≤)</label><input id="qty-threshold" type="number" min="0" value="5" /></div>
+        <div><label>Initial stock</label><input id="qty-initial" type="number" min="0" value="25" /></div>
       </div>
     </div>
 
-    <!-- Standalone -->
     <div id="g-standalone" class="type-group hidden">
       <label>Deadline (optional — leave blank for "due now")</label>
       <input id="standalone-deadline" type="datetime-local" />
     </div>
 
-    <!-- Dependency -->
     <div id="g-dep" class="type-group hidden">
       <label>Triggered when which task is done?</label>
       <select id="dep-trigger"></select>
       <div class="grid2">
-        <div>
-          <label>Delay</label>
-          <input id="dep-delay" type="number" min="0" value="4" />
-        </div>
-        <div>
-          <label>Unit</label>
-          <select id="dep-delay-unit">
-            <option value="hours">Hours</option>
-            <option value="days">Days</option>
-          </select>
-        </div>
+        <div><label>Delay</label><input id="dep-delay" type="number" min="0" value="4" /></div>
+        <div><label>Unit</label><select id="dep-delay-unit"><option value="hours">Hours</option><option value="days">Days</option></select></div>
       </div>
-      <p class="muted" style="margin-top:0.5rem">This task stays hidden until the trigger task is done, then appears as due after the specified delay.</p>
+      <p class="muted" style="margin-top:0.5rem">Hidden until trigger is done, then appears after the delay.</p>
     </div>
 
-    <!-- Attendance -->
     <div id="g-att" class="type-group hidden">
       <p class="muted">Daily check-in/check-out. No extra config needed.</p>
     </div>
 
-    <!-- Display timing -->
     <div class="type-group" style="margin-top:1rem">
       <p style="font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">Display Timing</p>
       <div class="grid2">
-        <div>
-          <label>Upcoming: show ___ hrs before due</label>
-          <input id="tc-upcoming-hrs" type="number" min="0" value="72" />
-        </div>
-        <div>
-          <label>Current: show ___ hrs before due</label>
-          <input id="tc-current-hrs" type="number" min="0" value="24" />
-        </div>
+        <div><label>Upcoming: show ___ hrs before due</label><input id="tc-upcoming-hrs" type="number" min="0" value="72" /></div>
+        <div><label>Current: show ___ hrs before due</label><input id="tc-current-hrs" type="number" min="0" value="24" /></div>
       </div>
       <label>Completed: keep visible for ___ days after done</label>
       <input id="tc-completed-days" type="number" min="0" value="7" />
     </div>
 
     <button type="submit">Create Task</button>
+    <div id="form-status" class="status-msg"></div>
   </form>
 
   <div class="btn-row">
@@ -148,19 +108,53 @@
     <button class="btn-save" onclick="saveToDisk()">Save to Disk</button>
     <button class="btn-import" onclick="document.getElementById('import-file').click()">Import from Disk</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importFromDisk(this)" />
+    <span id="import-status" class="status-msg"></span>
   </div>
 
   <div class="task-list" id="task-list"></div>
 
   <script>
-    const LS_KEY = 'office_tasks';
-    const LS_EVENTS = 'office_events';
-    const LS_INSTANCES = 'office_instances';
-    const LS_STOCK_PREFIX = 'office_stock_';
-    const LS_NOTES = 'office_notes';
+    // --- IndexedDB ---
+    const DB_NAME = 'office-app';
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('data')) db.createObjectStore('data');
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbGet(key) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('data', 'readonly');
+        const req = tx.objectStore('data').get(key);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    async function idbSet(key, value) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('data', 'readwrite');
+        tx.objectStore('data').put(value, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
 
-    function getTasks() { return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
-    function saveTasks(tasks) { localStorage.setItem(LS_KEY, JSON.stringify(tasks)); }
+    // --- Data accessors ---
+    async function getTasks() { return (await idbGet('tasks')) || []; }
+    async function saveTasks(t) { await idbSet('tasks', t); }
+    async function getInstances() { return (await idbGet('instances')) || []; }
+    async function saveInstances(i) { await idbSet('instances', i); }
+    async function getEvents() { return (await idbGet('events')) || []; }
+    async function getNotes() { return (await idbGet('notes')) || []; }
+    async function getStock(taskId) { return (await idbGet('stock_' + taskId)) || { qty: 0, events: [] }; }
+    async function saveStock(taskId, s) { await idbSet('stock_' + taskId, s); }
 
     const typeSelect = document.getElementById('tc-type');
     const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', standalone: 'g-standalone', dependency: 'g-dep', attendance: 'g-att' };
@@ -173,17 +167,17 @@
     typeSelect.addEventListener('change', updateGroups);
     updateGroups();
 
-    function populateTriggerSelect() {
+    async function populateTriggerSelect() {
       const sel = document.getElementById('dep-trigger');
-      const tasks = getTasks();
+      const tasks = await getTasks();
       sel.innerHTML = '<option value="">— select trigger task —</option>';
       tasks.filter(t => t.type !== 'dependency' && t.type !== 'attendance').forEach(t => {
         sel.innerHTML += `<option value="${t.id}">${t.name} (${t.type})</option>`;
       });
     }
 
-    function renderList() {
-      const tasks = getTasks();
+    async function renderList() {
+      const tasks = await getTasks();
       const container = document.getElementById('task-list');
       if (tasks.length === 0) { container.innerHTML = '<h3>Existing Tasks</h3><p class="muted">No tasks yet.</p>'; return; }
       container.innerHTML = '<h3>Existing Tasks</h3>' + tasks.map(t => {
@@ -207,12 +201,13 @@
       }).join('');
     }
 
-    window.delTask = function(id) {
-      saveTasks(getTasks().filter(t => t.id !== id));
+    window.delTask = async function(id) {
+      const tasks = await getTasks();
+      await saveTasks(tasks.filter(t => t.id !== id));
       renderList();
     };
 
-    document.getElementById('task-form').addEventListener('submit', (e) => {
+    document.getElementById('task-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = document.getElementById('tc-name').value.trim();
       const type = typeSelect.value;
@@ -243,10 +238,11 @@
         config = { deadline: deadline || null };
       } else if (type === 'dependency') {
         const triggerTaskId = document.getElementById('dep-trigger').value;
-        if (!triggerTaskId) { alert('Select a trigger task'); return; }
+        if (!triggerTaskId) { document.getElementById('form-status').textContent = '⚠️ Select a trigger task'; return; }
         const delay = parseInt(document.getElementById('dep-delay').value) || 0;
         const delayUnit = document.getElementById('dep-delay-unit').value;
-        const triggerTask = getTasks().find(t => t.id === triggerTaskId);
+        const tasks = await getTasks();
+        const triggerTask = tasks.find(t => t.id === triggerTaskId);
         desc = `after "${triggerTask ? triggerTask.name : triggerTaskId}" + ${delay} ${delayUnit}`;
         config = { triggerTaskId, delay, delayUnit };
       } else if (type === 'attendance') {
@@ -261,38 +257,38 @@
         createdAt: new Date().toISOString()
       };
 
-      const tasks = getTasks();
+      const tasks = await getTasks();
       tasks.push(task);
-      saveTasks(tasks);
+      await saveTasks(tasks);
 
       if (type === 'quantity' && config.initial > 0) {
-        localStorage.setItem(LS_STOCK_PREFIX + task.id, JSON.stringify({ qty: config.initial, events: [{ action: 'restock', qty: config.initial, ts: new Date().toISOString() }] }));
+        await saveStock(task.id, { qty: config.initial, events: [{ action: 'restock', qty: config.initial, ts: new Date().toISOString() }] });
       }
 
       if (type === 'standalone') {
-        let instances = JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]');
+        const instances = await getInstances();
         const dueAt = config.deadline ? new Date(config.deadline).toISOString() : new Date().toISOString();
         instances.push({ id: `${task.id}-0001`, taskId: task.id, dueAt, status: 'pending', createdAt: new Date().toISOString() });
-        localStorage.setItem(LS_INSTANCES, JSON.stringify(instances));
+        await saveInstances(instances);
       }
 
       e.target.reset();
       updateGroups();
+      document.getElementById('form-status').textContent = `✓ "${name}" created`;
+      setTimeout(() => document.getElementById('form-status').textContent = '', 3000);
       renderList();
     });
 
-    window.saveToDisk = function() {
-      const tasks = getTasks();
+    window.saveToDisk = async function() {
+      const tasks = await getTasks();
       const stock = {};
-      for (const t of tasks) {
-        if (t.type === 'quantity') stock[t.id] = JSON.parse(localStorage.getItem(LS_STOCK_PREFIX + t.id) || '{"qty":0,"events":[]}');
-      }
+      for (const t of tasks) { if (t.type === 'quantity') stock[t.id] = await getStock(t.id); }
       const data = {
         tasks,
-        instances: JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]'),
-        events: JSON.parse(localStorage.getItem(LS_EVENTS) || '[]'),
+        instances: await getInstances(),
+        events: await getEvents(),
         stock,
-        notes: JSON.parse(localStorage.getItem(LS_NOTES) || '[]'),
+        notes: await getNotes(),
         exportedAt: new Date().toISOString()
       };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -306,21 +302,20 @@
       const file = input.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
           const data = JSON.parse(e.target.result);
-          if (data.tasks) localStorage.setItem(LS_KEY, JSON.stringify(data.tasks));
-          if (data.instances) localStorage.setItem(LS_INSTANCES, JSON.stringify(data.instances));
-          if (data.events) localStorage.setItem(LS_EVENTS, JSON.stringify(data.events));
-          if (data.stock) {
-            for (const [taskId, stock] of Object.entries(data.stock)) {
-              localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(stock));
-            }
-          }
-          if (data.notes) localStorage.setItem(LS_NOTES, JSON.stringify(data.notes));
-          alert('Imported successfully.' + (data.exportedAt ? ' Backup from: ' + new Date(data.exportedAt).toLocaleString() : ''));
+          if (data.tasks) await idbSet('tasks', data.tasks);
+          if (data.instances) await idbSet('instances', data.instances);
+          if (data.events) await idbSet('events', data.events);
+          if (data.stock) { for (const [taskId, stock] of Object.entries(data.stock)) { await idbSet('stock_' + taskId, stock); } }
+          if (data.notes) await idbSet('notes', data.notes);
+          document.getElementById('import-status').textContent = `✓ Imported (${data.exportedAt ? new Date(data.exportedAt).toLocaleString() : ''})`;
+          setTimeout(() => document.getElementById('import-status').textContent = '', 4000);
           renderList();
-        } catch (err) { alert('Import failed: ' + err.message); }
+        } catch (err) {
+          document.getElementById('import-status').textContent = `✗ ${err.message}`;
+        }
         input.value = '';
       };
       reader.readAsText(file);
@@ -329,8 +324,4 @@
     renderList();
   </script>
 </body>
-</html>
-```
-
-No changes from the last version I gave — `tasks.html` was already final. The only addition is `LS_NOTES` in the save/import so notes round-trip correctly.
-
+</html>   
