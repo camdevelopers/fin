@@ -22,6 +22,7 @@
     .badge-missed { background: #fee2e2; color: #991b1b; }
     .badge-low { background: #fee2e2; color: #991b1b; }
     .badge-ok { background: #d1fae5; color: #065f46; }
+    .badge-standalone { background: #e5e7eb; color: #374151; }
     .actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
     .actions button { padding: 0.3rem 0.7rem; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 0.8rem; background: #fff; }
     .actions button:hover { background: #f3f4f6; }
@@ -42,11 +43,21 @@
     .btn-row button { padding: 0.4rem 0.8rem; border: none; border-radius: 4px; cursor: pointer; color: #fff; }
     .btn-save { background: #7c3aed; }
     .btn-import { background: #2563eb; }
+    /* Quick add bar */
+    .quick-add { display: flex; gap: 0.5rem; margin-bottom: 1rem; padding: 0.6rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; }
+    .quick-add input { flex: 1; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
+    .quick-add button { padding: 0.4rem 0.9rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+    .quick-add button:hover { background: #047857; }
   </style>
 </head>
 <body>
   <h2>Work Log</h2>
-  <p class="muted" style="font-size:0.85rem;margin-bottom:0.5rem">Auto-generates instances from tasks. Click buttons to log events.</p>
+
+  <!-- Quick add unplanned job -->
+  <div class="quick-add">
+    <input id="quick-add-input" placeholder="Quick add: type a job and press Add…" />
+    <button onclick="quickAdd()">Add</button>
+  </div>
 
   <div id="sec-attendance"></div>
   <div id="sec-missed"></div>
@@ -82,6 +93,47 @@
     const hrsFromNow = (h) => { const d = new Date(); d.setHours(d.getHours() + h); return d; };
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '';
     const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+
+    // --- Quick add unplanned job ---
+    window.quickAdd = function() {
+      const input = document.getElementById('quick-add-input');
+      const name = input.value.trim();
+      if (!name) return;
+
+      const tasks = getTasks();
+      const id = `job-${Date.now().toString(36)}`;
+      const task = {
+        id,
+        name,
+        type: 'standalone',
+        desc: 'unplanned',
+        config: { deadline: null },
+        upcomingHrs: 0,
+        currentHrs: 9999,
+        completedDays: 3,
+        createdAt: now().toISOString()
+      };
+      tasks.push(task);
+      localStorage.setItem(LS_TASKS, JSON.stringify(tasks));
+
+      const instances = getInstances();
+      instances.push({
+        id: `${id}-0001`,
+        taskId: id,
+        dueAt: now().toISOString(),
+        status: 'pending',
+        createdAt: now().toISOString()
+      });
+      saveInstances(instances);
+
+      input.value = '';
+      render();
+    };
+
+    // Allow Enter key in quick-add
+    document.getElementById('quick-add-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); quickAdd(); }
+    });
 
     // --- Instance generation engine ---
     function generateInstances() {
@@ -148,6 +200,8 @@
             changed = true;
           }
         }
+
+        // standalone: instance created at task creation time, no auto-generation
       }
 
       if (changed) saveInstances(instances);
@@ -293,7 +347,13 @@
 
     function renderCard({ task, instance, stock, isLow, inactive }) {
       let html = `<div class="card${inactive ? ' inactive' : ''}">`;
-      html += `<div class="card-header"><strong>${task.name}</strong><span class="badge ${instance ? 'badge-pending' : (isLow ? 'badge-low' : 'badge-ok')}">${instance ? instance.status : (isLow ? 'LOW' : 'ok')}</span></div>`;
+      html += `<div class="card-header"><strong>${task.name}</strong>`;
+      if (task.type === 'standalone') {
+        html += `<span class="badge badge-standalone">one-time</span>`;
+      } else {
+        html += `<span class="badge ${instance ? 'badge-pending' : (isLow ? 'badge-low' : 'badge-ok')}">${instance ? instance.status : (isLow ? 'LOW' : 'ok')}</span>`;
+      }
+      html += `</div>`;
 
       if (instance) {
         const due = new Date(instance.dueAt);
