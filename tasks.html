@@ -36,7 +36,7 @@
 
   <form id="task-form">
     <label>Name</label>
-    <input id="tc-name" required placeholder="e.g. Water garden" />
+    <input id="tc-name" required placeholder="e.g. Close book racks" />
 
     <label>Type</label>
     <select id="tc-type">
@@ -44,6 +44,7 @@
       <option value="calendar">Calendar (day-based)</option>
       <option value="quantity">Quantity (stock threshold)</option>
       <option value="standalone">Standalone (one-time)</option>
+      <option value="dependency">Dependency (triggered by another task)</option>
       <option value="attendance">Attendance</option>
     </select>
 
@@ -96,6 +97,13 @@
       <input id="standalone-deadline" type="datetime-local" />
     </div>
 
+    <!-- Dependency -->
+    <div id="g-dep" class="type-group hidden">
+      <label>Triggered when which task is done?</label>
+      <select id="dep-trigger"></select>
+      <p class="muted" style="margin-top:0.5rem">This task stays hidden until the trigger task's latest instance is marked done. Then it appears as due now.</p>
+    </div>
+
     <!-- Attendance -->
     <div id="g-att" class="type-group hidden">
       <p class="muted">Daily check-in/check-out. No extra config needed.</p>
@@ -140,30 +148,47 @@
     function saveTasks(tasks) { localStorage.setItem(LS_KEY, JSON.stringify(tasks)); }
 
     const typeSelect = document.getElementById('tc-type');
-    const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', standalone: 'g-standalone', attendance: 'g-att' };
+    const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', standalone: 'g-standalone', dependency: 'g-dep', attendance: 'g-att' };
     function updateGroups() {
       for (const [type, id] of Object.entries(groups)) {
         document.getElementById(id).classList.toggle('hidden', typeSelect.value !== type);
       }
+      if (typeSelect.value === 'dependency') populateTriggerSelect();
     }
     typeSelect.addEventListener('change', updateGroups);
     updateGroups();
+
+    function populateTriggerSelect() {
+      const sel = document.getElementById('dep-trigger');
+      const tasks = getTasks();
+      sel.innerHTML = '<option value="">— select trigger task —</option>';
+      tasks.filter(t => t.type !== 'dependency' && t.type !== 'attendance').forEach(t => {
+        sel.innerHTML += `<option value="${t.id}">${t.name} (${t.type})</option>`;
+      });
+    }
 
     function renderList() {
       const tasks = getTasks();
       const container = document.getElementById('task-list');
       if (tasks.length === 0) { container.innerHTML = '<h3>Existing Tasks</h3><p class="muted">No tasks yet.</p>'; return; }
-      container.innerHTML = '<h3>Existing Tasks</h3>' + tasks.map(t => `
+      container.innerHTML = '<h3>Existing Tasks</h3>' + tasks.map(t => {
+        let extra = '';
+        if (t.type === 'dependency' && t.config.triggerTaskId) {
+          const trigger = tasks.find(x => x.id === t.config.triggerTaskId);
+          extra = `<span class="muted" style="font-size:0.7rem">⚡ after: ${trigger ? trigger.name : t.config.triggerTaskId}</span>`;
+        }
+        return `
         <div class="task-row">
           <div class="info">
             <strong>${t.name}</strong>
             <span class="badge">${t.type}</span>
             <span class="muted">${t.desc}</span>
+            ${extra}
             <span class="muted" style="font-size:0.7rem">up:${t.upcomingHrs}h cur:${t.currentHrs}h done:${t.completedDays}d</span>
           </div>
           <button onclick="delTask('${t.id}')">Delete</button>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
     }
 
     window.delTask = function(id) {
@@ -200,6 +225,12 @@
         const deadline = document.getElementById('standalone-deadline').value;
         desc = deadline ? `due ${new Date(deadline).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'due now';
         config = { deadline: deadline || null };
+      } else if (type === 'dependency') {
+        const triggerTaskId = document.getElementById('dep-trigger').value;
+        if (!triggerTaskId) { alert('Select a trigger task'); return; }
+        const triggerTask = getTasks().find(t => t.id === triggerTaskId);
+        desc = `after "${triggerTask ? triggerTask.name : triggerTaskId}" is done`;
+        config = { triggerTaskId };
       } else if (type === 'attendance') {
         desc = 'daily check-in/out';
         config = {};
@@ -216,24 +247,18 @@
       tasks.push(task);
       saveTasks(tasks);
 
-      // Stock: init
       if (type === 'quantity' && config.initial > 0) {
         localStorage.setItem(LS_STOCK_PREFIX + task.id, JSON.stringify({ qty: config.initial, events: [{ action: 'restock', qty: config.initial, ts: new Date().toISOString() }] }));
       }
 
-      // Standalone: create instance immediately
       if (type === 'standalone') {
         let instances = JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]');
         const dueAt = config.deadline ? new Date(config.deadline).toISOString() : new Date().toISOString();
-        instances.push({
-          id: `${task.id}-0001`,
-          taskId: task.id,
-          dueAt,
-          status: 'pending',
-          createdAt: new Date().toISOString()
-        });
+        instances.push({ id: `${task.id}-0001`, taskId: task.id, dueAt, status: 'pending', createdAt: new Date().toISOString() });
         localStorage.setItem(LS_INSTANCES, JSON.stringify(instances));
       }
+
+      // dependency: NO instance created yet — it appears only when trigger fires
 
       e.target.reset();
       updateGroups();
@@ -246,13 +271,7 @@
       for (const t of tasks) {
         if (t.type === 'quantity') stock[t.id] = JSON.parse(localStorage.getItem(LS_STOCK_PREFIX + t.id) || '{"qty":0,"events":[]}');
       }
-      const data = {
-        tasks,
-        instances: JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]'),
-        events: JSON.parse(localStorage.getItem(LS_EVENTS) || '[]'),
-        stock,
-        exportedAt: new Date().toISOString()
-      };
+      const data = { tasks, instances: JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]'), events: JSON.parse(localStorage.getItem(LS_EVENTS) || '[]'), stock, exportedAt: new Date().toISOString() };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -270,16 +289,10 @@
           if (data.tasks) localStorage.setItem(LS_KEY, JSON.stringify(data.tasks));
           if (data.instances) localStorage.setItem(LS_INSTANCES, JSON.stringify(data.instances));
           if (data.events) localStorage.setItem(LS_EVENTS, JSON.stringify(data.events));
-          if (data.stock) {
-            for (const [taskId, stock] of Object.entries(data.stock)) {
-              localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(stock));
-            }
-          }
+          if (data.stock) { for (const [taskId, stock] of Object.entries(data.stock)) { localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(stock)); } }
           alert('Imported successfully.' + (data.exportedAt ? ' Backup from: ' + new Date(data.exportedAt).toLocaleString() : ''));
           renderList();
-        } catch (err) {
-          alert('Import failed: ' + err.message);
-        }
+        } catch (err) { alert('Import failed: ' + err.message); }
         input.value = '';
       };
       reader.readAsText(file);
