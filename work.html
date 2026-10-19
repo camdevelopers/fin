@@ -8,7 +8,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
     h2 { margin-bottom: 0.5rem; }
-    h3 { margin: 1rem 0 0.5rem; font-size: 0.95rem; }
+    h3 { margin: 1.2rem 0 0.5rem; font-size: 0.95rem; }
     .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; }
     .card.inactive { opacity: 0.55; }
     .card.missed { border-left: 3px solid #dc2626; }
@@ -20,37 +20,46 @@
     .badge-pending { background: #fef3c7; color: #92400e; }
     .badge-done { background: #d1fae5; color: #065f46; }
     .badge-missed { background: #fee2e2; color: #991b1b; }
-    .badge-qty { background: #dbeafe; color: #1e40af; }
+    .badge-low { background: #fee2e2; color: #991b1b; }
+    .badge-ok { background: #d1fae5; color: #065f46; }
     .actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; }
     .actions button { padding: 0.3rem 0.7rem; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 0.8rem; background: #fff; }
     .actions button:hover { background: #f3f4f6; }
-    .actions button.btn-done { background: #059669; color: #fff; border-color: #059669; }
-    .actions button.btn-checkin { background: #2563eb; color: #fff; border-color: #2563eb; }
-    .actions button.btn-checkout { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .actions .btn-done { background: #059669; color: #fff; border-color: #059669; }
+    .actions .btn-checkin { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .actions .btn-checkout { background: #dc2626; color: #fff; border-color: #dc2626; }
     .stock-bar-bg { height: 6px; background: #e5e7eb; border-radius: 3px; margin-top: 0.4rem; overflow: hidden; }
     .stock-bar-fill { height: 100%; background: #059669; border-radius: 3px; }
     .stock-bar-fill.low { background: #dc2626; }
     .stock-label { font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem; }
-    .att-entry { font-size: 0.85rem; padding: 0.2rem 0; border-bottom: 1px solid #f3f4f6; }
+    .att-entry { font-size: 0.85rem; padding: 0.25rem 0; border-bottom: 1px solid #f3f4f6; }
     .events-log { margin-top: 1.5rem; }
     .event-row { font-size: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid #f3f4f6; color: #374151; }
     .event-row .ts { color: #6b7280; }
     a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
     .muted { color: #6b7280; }
+    .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; align-items: center; }
+    .btn-row button { padding: 0.4rem 0.8rem; border: none; border-radius: 4px; cursor: pointer; color: #fff; }
+    .btn-save { background: #7c3aed; }
+    .btn-import { background: #2563eb; }
   </style>
 </head>
 <body>
   <h2>Work Log</h2>
-  <p class="muted" style="font-size:0.85rem;margin-bottom:1rem">Auto-generates instances from tasks. Click buttons to log events.</p>
+  <p class="muted" style="font-size:0.85rem;margin-bottom:0.5rem">Auto-generates instances from tasks. Click buttons to log events.</p>
 
+  <div id="sec-attendance"></div>
   <div id="sec-missed"></div>
   <div id="sec-current"></div>
   <div id="sec-upcoming"></div>
   <div id="sec-completed"></div>
-  <div id="sec-attendance"></div>
 
-  <a href="tasks.html">→ Manage Tasks</a>
-  <button onclick="saveToDisk()" style="padding:0.4rem 0.8rem;background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:1rem">Save to Disk</button>
+  <div class="btn-row">
+    <a href="tasks.html">→ Manage Tasks</a>
+    <button class="btn-save" onclick="saveToDisk()">Save to Disk</button>
+    <button class="btn-import" onclick="document.getElementById('import-file').click()">Import from Disk</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importFromDisk(this)" />
+  </div>
 
   <div class="events-log" id="events-log"></div>
 
@@ -65,10 +74,7 @@
     function saveEvents(evs) { localStorage.setItem(LS_EVENTS, JSON.stringify(evs)); }
     function getInstances() { return JSON.parse(localStorage.getItem(LS_INSTANCES) || '[]'); }
     function saveInstances(insts) { localStorage.setItem(LS_INSTANCES, JSON.stringify(insts)); }
-    function getStock(taskId) {
-      const s = JSON.parse(localStorage.getItem(LS_STOCK_PREFIX + taskId) || '{"qty":0,"events":[]}');
-      return s;
-    }
+    function getStock(taskId) { return JSON.parse(localStorage.getItem(LS_STOCK_PREFIX + taskId) || '{"qty":0,"events":[]}'); }
     function saveStock(taskId, s) { localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(s)); }
 
     const now = () => new Date();
@@ -80,49 +86,52 @@
     // --- Instance generation engine ---
     function generateInstances() {
       const tasks = getTasks();
-      const instances = getInstances();
+      let instances = getInstances();
       let changed = false;
 
       for (const task of tasks) {
+        if (task.type === 'attendance') continue;
+
         const taskInstances = instances.filter(i => i.taskId === task.id);
         const lastDone = taskInstances.filter(i => i.status === 'done').sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt))[0];
         const pending = taskInstances.filter(i => i.status === 'pending' || i.status === 'doing' || i.status === 'will_do');
 
-if (task.type === 'sequence') {
-  let next;
-  if (lastDone) {
-    next = new Date(lastDone.doneAt);
-    if (task.config.unit === 'hours') next.setHours(next.getHours() + task.config.n);
-    else next.setDate(next.getDate() + task.config.n);
-  } else {
-    // First instance: due immediately
-    next = new Date();
-  }
-
-  if (pending.length === 0 && next <= hrsFromNow(task.upcomingHrs + 1)) {
-    instances.push({
-      id: `${task.id}-${next.toISOString().slice(0,10)}-${next.getHours()}`,
-      taskId: task.id,
-      dueAt: next.toISOString(),
-      status: 'pending',
-      createdAt: now().toISOString()
-    });
-    changed = true;
-  }
-}
+        if (task.type === 'sequence') {
+          if (pending.length === 0) {
+            let next;
+            if (lastDone) {
+              next = new Date(lastDone.doneAt);
+              if (task.config.unit === 'hours') next.setHours(next.getHours() + task.config.n);
+              else next.setDate(next.getDate() + task.config.n);
+            } else {
+              next = new Date();
+            }
+            if (next <= hrsFromNow(task.upcomingHrs + 1)) {
+              instances.push({
+                id: `${task.id}-${Date.now().toString(36)}`,
+                taskId: task.id,
+                dueAt: next.toISOString(),
+                status: 'pending',
+                createdAt: now().toISOString()
+              });
+              changed = true;
+            }
+          }
+        }
 
         else if (task.type === 'calendar') {
-          // Next due = day X of current/next month (or quarter/year)
-          const next = nextCalendarDue(task);
-          if (next && pending.length === 0) {
-            instances.push({
-              id: `${task.id}-${next.toISOString().slice(0,10)}`,
-              taskId: task.id,
-              dueAt: next.toISOString(),
-              status: 'pending',
-              createdAt: now().toISOString()
-            });
-            changed = true;
+          if (pending.length === 0) {
+            const next = nextCalendarDue(task);
+            if (next && next <= hrsFromNow(task.upcomingHrs + 1)) {
+              instances.push({
+                id: `${task.id}-${next.toISOString().slice(0,10)}`,
+                taskId: task.id,
+                dueAt: next.toISOString(),
+                status: 'pending',
+                createdAt: now().toISOString()
+              });
+              changed = true;
+            }
           }
         }
 
@@ -139,8 +148,6 @@ if (task.type === 'sequence') {
             changed = true;
           }
         }
-
-        // attendance: no instances needed, handled directly
       }
 
       if (changed) saveInstances(instances);
@@ -158,8 +165,8 @@ if (task.type === 'sequence') {
         d.setMonth(qStart, task.config.day);
         d.setHours(23, 59, 59, 999);
         if (d <= now()) {
-          const nextQ = Math.floor(d.getMonth() / 3) + 1;
-          d.setMonth(nextQ * 3, task.config.day);
+          d.setMonth(Math.floor(d.getMonth() / 3) + 1, 1);
+          d.setMonth(d.getMonth(), task.config.day);
           d.setHours(23, 59, 59, 999);
         }
       } else if (task.config.repeat === 'annual') {
@@ -179,21 +186,21 @@ if (task.type === 'sequence') {
       const events = getEvents();
       const today = todayStr();
 
-      // Attendance section
+      // Attendance
       const attTasks = tasks.filter(t => t.type === 'attendance');
-      const attEvents = events.filter(e => e.taskId === 'attendance' && e.ts.slice(0, 10) === today);
       const attContainer = document.getElementById('sec-attendance');
       if (attTasks.length > 0) {
+        const attEvents = events.filter(e => e.taskId === 'attendance' && e.ts.slice(0, 10) === today);
         let html = '<h3>🕐 Attendance (Today)</h3>';
+
         if (attEvents.length > 0) {
-          // Group by pairs
           let i = 0;
           while (i < attEvents.length) {
             const ev = attEvents[i];
             if (ev.action === 'checkin') {
               const next = attEvents[i + 1];
               const checkout = next && next.action === 'checkout' ? next : null;
-              html += `<div class="card"><div class="att-entry"><strong>#${i + 1}</strong> In: ${fmtTime(ev.ts)} | Out: ${checkout ? fmtTime(checkout.ts) : '—'}</div></div>`;
+              html += `<div class="card"><div class="att-entry"><strong>#${Math.ceil((i + 1) / 2)}</strong> In: <strong>${fmtTime(ev.ts)}</strong> | Out: <strong>${checkout ? fmtTime(checkout.ts) : '—'}</strong></div></div>`;
               i += checkout ? 2 : 1;
             } else {
               i++;
@@ -202,7 +209,7 @@ if (task.type === 'sequence') {
         } else {
           html += '<p class="muted">No entries yet.</p>';
         }
-        // Buttons
+
         const lastEv = attEvents[attEvents.length - 1];
         if (!lastEv || lastEv.action === 'checkout') {
           html += `<div class="actions"><button class="btn-checkin" onclick="logAtt('checkin')">Check In</button></div>`;
@@ -220,19 +227,13 @@ if (task.type === 'sequence') {
       for (const task of tasks) {
         if (task.type === 'attendance') continue;
 
-        // Stock tasks: always show
         if (task.type === 'quantity') {
           const stock = getStock(task.id);
           const isLow = stock.qty <= task.config.threshold;
           const pendingInst = instances.find(i => i.taskId === task.id && i.status === 'pending');
           const lastDoneInst = instances.filter(i => i.taskId === task.id && i.status === 'done').sort((a, b) => new Date(b.doneAt) - new Date(a.doneAt))[0];
 
-          if (isLow || pendingInst) {
-            current.push({ task, instance: pendingInst || null, stock, isLow });
-          } else {
-            // Show as inactive in current
-            current.push({ task, instance: null, stock, isLow: false, inactive: true });
-          }
+          current.push({ task, instance: pendingInst || null, stock, isLow, inactive: !isLow && !pendingInst });
           if (lastDoneInst && withinCompletedWindow(lastDoneInst, task)) {
             completed.push({ task, instance: lastDoneInst });
           }
@@ -261,7 +262,6 @@ if (task.type === 'sequence') {
         }
       }
 
-      // Render sections
       document.getElementById('sec-missed').innerHTML = renderSection('⚠️ Missed', missed, renderCard);
       document.getElementById('sec-current').innerHTML = renderSection('📋 Current', current, renderCard);
       document.getElementById('sec-upcoming').innerHTML = renderSection('📅 Upcoming', upcoming, renderCard);
@@ -272,7 +272,7 @@ if (task.type === 'sequence') {
       if (events.length > 0) {
         logContainer.innerHTML = '<h3>📜 Event Log (last 20)</h3>' +
           events.slice(-20).reverse().map(e =>
-            `<div class="event-row"><span class="ts">${new Date(e.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> <strong>${e.action}</strong> ${e.taskId} ${e.note ? '— ' + e.note : ''}</div>`
+            `<div class="event-row"><span class="ts">${new Date(e.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> <strong>${e.action}</strong> ${e.taskId}${e.note ? ' — ' + e.note : ''}</div>`
           ).join('');
       } else {
         logContainer.innerHTML = '';
@@ -293,12 +293,12 @@ if (task.type === 'sequence') {
 
     function renderCard({ task, instance, stock, isLow, inactive }) {
       let html = `<div class="card${inactive ? ' inactive' : ''}">`;
-      html += `<div class="card-header"><strong>${task.name}</strong><span class="badge badge-pending">${instance ? instance.status : (isLow ? 'LOW' : 'ok')}</span></div>`;
+      html += `<div class="card-header"><strong>${task.name}</strong><span class="badge ${instance ? 'badge-pending' : (isLow ? 'badge-low' : 'badge-ok')}">${instance ? instance.status : (isLow ? 'LOW' : 'ok')}</span></div>`;
 
       if (instance) {
         const due = new Date(instance.dueAt);
         const hrsUntil = Math.round((due - now()) / 3600000);
-        html += `<div class="card-meta">Due: ${fmtDate(due)} ${fmtTime(due)} (${hrsUntil > 0 ? hrsUntil + 'h' : Math.abs(hrsUntil) + 'h ago'})</div>`;
+        html += `<div class="card-meta">Due: ${fmtDate(due)} ${fmtTime(due)} (${hrsUntil > 0 ? hrsUntil + 'h from now' : Math.abs(hrsUntil) + 'h ago'})</div>`;
       }
 
       if (task.type === 'quantity' && stock) {
@@ -331,7 +331,7 @@ if (task.type === 'sequence') {
 
     // --- Actions ---
     window.logAction = function(instanceId, taskId, action, note = '') {
-      const instances = getInstances();
+      let instances = getInstances();
       const inst = instances.find(i => i.id === instanceId);
       if (inst) {
         inst.status = action;
@@ -366,13 +366,14 @@ if (task.type === 'sequence') {
       render();
     };
 
+    // --- Save / Import ---
     window.saveToDisk = function() {
-      const data = {
-        tasks: getTasks(),
-        instances: getInstances(),
-        events: getEvents(),
-        exportedAt: now().toISOString()
-      };
+      const tasks = getTasks();
+      const stock = {};
+      for (const t of tasks) {
+        if (t.type === 'quantity') stock[t.id] = getStock(t.id);
+      }
+      const data = { tasks, instances: getInstances(), events: getEvents(), stock, exportedAt: now().toISOString() };
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -380,9 +381,33 @@ if (task.type === 'sequence') {
       a.click();
     };
 
-    // Initial render
+    window.importFromDisk = function(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.tasks) localStorage.setItem(LS_TASKS, JSON.stringify(data.tasks));
+          if (data.instances) localStorage.setItem(LS_INSTANCES, JSON.stringify(data.instances));
+          if (data.events) localStorage.setItem(LS_EVENTS, JSON.stringify(data.events));
+          if (data.stock) {
+            for (const [taskId, stock] of Object.entries(data.stock)) {
+              localStorage.setItem(LS_STOCK_PREFIX + taskId, JSON.stringify(stock));
+            }
+          }
+          alert('Imported successfully.' + (data.exportedAt ? ' Backup from: ' + new Date(data.exportedAt).toLocaleString() : ''));
+          render();
+        } catch (err) {
+          alert('Import failed: ' + err.message);
+        }
+        input.value = '';
+      };
+      reader.readAsText(file);
+    };
+
+    // Initial render + 60s auto-refresh
     render();
-    // Re-render every 60s (catches new due instances)
     setInterval(render, 60000);
   </script>
 </body>
