@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasks - Create</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
+    h2 { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; color: #374151; margin-top: 0.75rem; }
+    input, select { width: 100%; padding: 0.5rem; margin-top: 0.2rem; border: 1px solid #d1d5db; border-radius: 4px; }
+    .type-group { margin-top: 0.75rem; padding: 0.75rem; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .hidden { display: none; }
+    button { padding: 0.5rem 1.2rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 1rem; }
+    button:hover { background: #047857; }
+    .task-list { margin-top: 1.5rem; }
+    .task-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
+    .task-row .info { display: flex; align-items: center; gap: 0.5rem; }
+    .task-row .badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 3px; background: #dbeafe; color: #1e40af; }
+    .task-row button { padding: 0.25rem 0.6rem; font-size: 0.8rem; background: #fee2e2; color: #991b1b; margin: 0; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <h2>Create Task</h2>
+
+  <form id="task-form">
+    <label>Name</label>
+    <input id="tc-name" required placeholder="e.g. Water garden" />
+
+    <label>Type</label>
+    <select id="tc-type">
+      <option value="sequence">Sequence (every N hours/days)</option>
+      <option value="calendar">Calendar (day-based)</option>
+      <option value="quantity">Quantity (stock threshold)</option>
+      <option value="attendance">Attendance</option>
+    </select>
+
+    <!-- Sequence -->
+    <div id="g-seq" class="type-group hidden">
+      <div class="grid2">
+        <div>
+          <label>Interval</label>
+          <input id="seq-n" type="number" min="1" value="2" />
+        </div>
+        <div>
+          <label>Unit</label>
+          <select id="seq-unit">
+            <option value="days">Days</option>
+            <option value="hours">Hours</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calendar -->
+    <div id="g-cal" class="type-group hidden">
+      <label>On which day of month?</label>
+      <input id="cal-day" type="number" min="1" max="31" value="5" />
+      <label>Repeat</label>
+      <select id="cal-repeat">
+        <option value="monthly">Monthly</option>
+        <option value="quarterly">Quarterly</option>
+        <option value="annual">Annual</option>
+      </select>
+    </div>
+
+    <!-- Quantity -->
+    <div id="g-qty" class="type-group hidden">
+      <div class="grid2">
+        <div>
+          <label>Threshold (due when ≤)</label>
+          <input id="qty-threshold" type="number" min="0" value="5" />
+        </div>
+        <div>
+          <label>Initial stock</label>
+          <input id="qty-initial" type="number" min="0" value="25" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Attendance: no extra fields -->
+    <div id="g-att" class="type-group hidden">
+      <p class="muted" style="font-size:0.85rem;color:#6b7280">Daily check-in/check-out. No extra config needed.</p>
+    </div>
+
+    <!-- Display timing (applies to all types) -->
+    <div class="type-group" style="margin-top:1rem">
+      <p style="font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">Display Timing</p>
+      <div class="grid2">
+        <div>
+          <label>Upcoming: show ___ hrs before due</label>
+          <input id="tc-upcoming-hrs" type="number" min="0" value="72" />
+        </div>
+        <div>
+          <label>Current: show ___ hrs before due</label>
+          <input id="tc-current-hrs" type="number" min="0" value="24" />
+        </div>
+      </div>
+      <label>Completed: keep visible for ___ days after done</label>
+      <input id="tc-completed-days" type="number" min="0" value="7" />
+    </div>
+
+    <button type="submit">Create Task</button>
+  </form>
+
+  <a href="work.html">→ Go to Work Log</a>
+
+  <div class="task-list" id="task-list"></div>
+
+  <script>
+    const LS_KEY = 'office_tasks';
+
+    function getTasks() {
+      return JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+    }
+    function saveTasks(tasks) {
+      localStorage.setItem(LS_KEY, JSON.stringify(tasks));
+    }
+
+    // Type-aware show/hide
+    const typeSelect = document.getElementById('tc-type');
+    const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', attendance: 'g-att' };
+    function updateGroups() {
+      for (const [type, id] of Object.entries(groups)) {
+        document.getElementById(id).classList.toggle('hidden', typeSelect.value !== type);
+      }
+    }
+    typeSelect.addEventListener('change', updateGroups);
+    updateGroups();
+
+    // Render existing tasks
+    function renderList() {
+      const tasks = getTasks();
+      const container = document.getElementById('task-list');
+      if (tasks.length === 0) { container.innerHTML = '<p style="color:#6b7280;margin-top:1rem">No tasks yet.</p>'; return; }
+      container.innerHTML = '<h3 style="margin-top:1.5rem">Existing Tasks</h3>' + tasks.map(t => `
+        <div class="task-row">
+          <div class="info">
+            <strong>${t.name}</strong>
+            <span class="badge">${t.type}</span>
+            <span style="font-size:0.8rem;color:#6b7280">${t.desc}</span>
+          </div>
+          <button onclick="delTask('${t.id}')">Delete</button>
+        </div>
+      `).join('');
+    }
+
+    window.delTask = function(id) {
+      let tasks = getTasks().filter(t => t.id !== id);
+      saveTasks(tasks);
+      renderList();
+    };
+
+    // Form submit
+    document.getElementById('task-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = document.getElementById('tc-name').value.trim();
+      const type = typeSelect.value;
+      const upcomingHrs = parseInt(document.getElementById('tc-upcoming-hrs').value) || 72;
+      const currentHrs = parseInt(document.getElementById('tc-current-hrs').value) || 24;
+      const completedDays = parseInt(document.getElementById('tc-completed-days').value) || 7;
+
+      let desc = '';
+      let config = {};
+
+      if (type === 'sequence') {
+        const n = parseInt(document.getElementById('seq-n').value) || 1;
+        const unit = document.getElementById('seq-unit').value;
+        desc = `every ${n} ${unit}`;
+        config = { n, unit };
+      } else if (type === 'calendar') {
+        const day = parseInt(document.getElementById('cal-day').value) || 1;
+        const repeat = document.getElementById('cal-repeat').value;
+        desc = `day ${day}, ${repeat}`;
+        config = { day, repeat };
+      } else if (type === 'quantity') {
+        const threshold = parseInt(document.getElementById('qty-threshold').value) || 0;
+        const initial = parseInt(document.getElementById('qty-initial').value) || 0;
+        desc = `threshold ${threshold}, initial ${initial}`;
+        config = { threshold, initial };
+      } else if (type === 'attendance') {
+        desc = 'daily check-in/out';
+        config = {};
+      }
+
+      const task = {
+        id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        name, type, desc, config,
+        upcomingHrs, currentHrs, completedDays,
+        createdAt: new Date().toISOString()
+      };
+
+      const tasks = getTasks();
+      tasks.push(task);
+      saveTasks(tasks);
+
+      // If quantity, init stock
+      if (type === 'quantity' && config.initial > 0) {
+        const stockKey = `office_stock_${task.id}`;
+        localStorage.setItem(stockKey, JSON.stringify({ qty: config.initial, events: [{ action: 'restock', qty: config.initial, ts: new Date().toISOString() }] }));
+      }
+
+      e.target.reset();
+      updateGroups();
+      renderList();
+    });
+
+    // Save to disk (download JSON)
+    window.saveToDisk = function() {
+      const data = { tasks: getTasks(), events: JSON.parse(localStorage.getItem('office_events') || '[]') };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `office_backup_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+    };
+
+    renderList();
+  </script>
+</body>
+</html>   
