@@ -431,13 +431,24 @@ async function doPull() {
 }
 
 // ─── Sync UI ────────────────────────────────────────────────────────────
-function updateSyncBadge() {
+function updateSyncBadge1() {
   const res = db.exec(`SELECT COUNT(*) FROM events WHERE synced=0 UNION ALL SELECT COUNT(*) FROM tasks WHERE synced=0 UNION ALL SELECT COUNT(*) FROM instances WHERE synced=0 UNION ALL SELECT COUNT(*) FROM notes WHERE synced=0 UNION ALL SELECT COUNT(*) FROM stock WHERE synced=0 UNION ALL SELECT COUNT(*) FROM attendance WHERE synced=0`);
   let total = 0;
   for (const r of res) total += r[0].values[0][0];
   document.getElementById('sync-count').textContent = total;
   document.getElementById('sync-badge').classList.toggle('has-pending', total > 0);
 }
+
+
+function updateSyncBadge() {
+  let total = 0;
+  try {
+    const res = db.exec(`SELECT (SELECT COUNT(*) FROM events WHERE synced=0) + (SELECT COUNT(*) FROM tasks WHERE synced=0) + (SELECT COUNT(*) FROM instances WHERE synced=0) + (SELECT COUNT(*) FROM notes WHERE synced=0) + (SELECT COUNT(*) FROM stock WHERE synced=0) + (SELECT COUNT(*) FROM attendance WHERE synced=0)`);
+    if (res.length > 0 && res[0].values.length > 0) total = res[0].values[0][0];
+  } catch (e) { /* ignore */ }
+  document.getElementById('sync-count').textContent = total;
+  document.getElementById('sync-badge').classList.toggle('has-pending', total > 0);
+}   
 
 window.toggleSyncPanel = function() {
   const panel = document.getElementById('sync-panel');
