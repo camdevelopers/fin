@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasks</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
+    h2 { margin-bottom: 1rem; }
+    h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+    label { display: block; font-size: 0.85rem; color: #374151; margin-top: 0.75rem; }
+    input, select { width: 100%; padding: 0.5rem; margin-top: 0.2rem; border: 1px solid #d1d5db; border-radius: 4px; }
+    .type-group { margin-top: 0.75rem; padding: 0.75rem; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .hidden { display: none; }
+    button { padding: 0.5rem 1.2rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 1rem; }
+    button:hover { background: #047857; }
+    .task-list { margin-top: 1.5rem; }
+    .task-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
+    .task-row .info { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .task-row .badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 3px; background: #dbeafe; color: #1e40af; }
+    .task-row button { padding: 0.25rem 0.6rem; font-size: 0.8rem; background: #fee2e2; color: #991b1b; margin: 0; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+    .muted { color: #6b7280; font-size: 0.85rem; }
+    .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; align-items: center; }
+    .btn-row button { margin-top: 0; padding: 0.4rem 0.8rem; border: none; border-radius: 4px; cursor: pointer; color: #fff; }
+    .btn-import { background: #2563eb; }
+    .btn-save { background: #7c3aed; }
+    .btn-sync { background: #0891b2; }
+    .status-msg { font-size: 0.8rem; color: #059669; margin-top: 0.3rem; }
+    .status-msg.err { color: #dc2626; }
+    #login { max-width: 320px; margin: 4rem auto; }
+    #login input { display: block; width: 100%; margin: 0.5rem 0; padding: 0.6rem; }
+    #login button { width: 100%; }
+    #login-error { color: #dc2626; font-size: 0.85rem; margin-top: 0.5rem; display: none; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #e5e7eb; margin-bottom: 1rem; }
+    #sync-badge { font-size: 0.75rem; color: #0891b2; cursor: pointer; }
+    #sync-badge.has-pending { color: #dc2626; font-weight: 600; }
+    #sync-panel { display: none; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem; background: #f9fafb; font-size: 0.85rem; }
+    #sync-panel .row { padding: 0.2rem 0; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between; }
+    #sync-panel .row button { padding: 0.15rem 0.4rem; font-size: 0.7rem; border: 1px solid #d1d5db; border-radius: 3px; cursor: pointer; background: #fff; }
+  </style>
+</head>
+<body>
+
+<div id="login">
+  <h2>Sign In</h2>
+  <input id="loginName" placeholder="Name" />
+  <input id="loginToken" type="password" placeholder="GitHub PAT + 64-char key" />
+  <button id="loginBtn">Sign In</button>
+  <p id="login-error"></p>
+</div>
+
+<div id="app" style="display:none">
+  <header>
+    <span id="userLabel"></span>
+    <span id="sync-badge" onclick="toggleSyncPanel()">☁️ <span id="sync-count">0</span></span>
+  </header>
+  <div id="sync-panel"></div>
+
+  <h2>Create Task</h2>
+  <form id="task-form">
+    <label>Name</label>
+    <input id="tc-name" required placeholder="e.g. Water garden" />
+    <label>Type</label>
+    <select id="tc-type">
+      <option value="sequence">Sequence (every N hours/days)</option>
+      <option value="calendar">Calendar (day-based)</option>
+      <option value="quantity">Quantity (stock threshold)</option>
+      <option value="standalone">Standalone (one-time)</option>
+      <option value="dependency">Dependency (triggered by another task)</option>
+      <option value="attendance">Attendance</option>
+    </select>
+    <div id="g-seq" class="type-group hidden">
+      <div class="grid2">
+        <div><label>Interval</label><input id="seq-n" type="number" min="1" value="2" /></div>
+        <div><label>Unit</label><select id="seq-unit"><option value="days">Days</option><option value="hours">Hours</option></select></div>
+      </div>
+    </div>
+    <div id="g-cal" class="type-group hidden">
+      <label>On which day of month?</label>
+      <input id="cal-day" type="number" min="1" max="31" value="5" />
+      <label>Repeat</label>
+      <select id="cal-repeat"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select>
+    </div>
+    <div id="g-qty" class="type-group hidden">
+      <div class="grid2">
+        <div><label>Threshold (due when stock ≤)</label><input id="qty-threshold" type="number" min="0" value="5" /></div>
+        <div><label>Initial stock</label><input id="qty-initial" type="number" min="0" value="25" /></div>
+      </div>
+    </div>
+    <div id="g-standalone" class="type-group hidden">
+      <label>Deadline (optional)</label>
+      <input id="standalone-deadline" type="datetime-local" />
+    </div>
+    <div id="g-dep" class="type-group hidden">
+      <label>Triggered when which task is done?</label>
+      <select id="dep-trigger"></select>
+      <div class="grid2">
+        <div><label>Delay</label><input id="dep-delay" type="number" min="0" value="4" /></div>
+        <div><label>Unit</label><select id="dep-delay-unit"><option value="hours">Hours</option><option value="days">Days</option></select></div>
+      </div>
+    </div>
+    <div id="g-att" class="type-group hidden">
+      <p class="muted">Daily check-in/check-out.</p>
+    </div>
+    <div class="type-group" style="margin-top:1rem">
+      <p style="font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">Display Timing</p>
+      <div class="grid2">
+        <div><label>Upcoming: show ___ hrs before due</label><input id="tc-upcoming-hrs" type="number" min="0" value="72" /></div>
+        <div><label>Current: show ___ hrs before due</label><input id="tc-current-hrs" type="number" min="0" value="24" /></div>
+      </div>
+      <label>Completed: keep visible for ___ days</label>
+      <input id="tc-completed-days" type="number" min="0" value="7" />
+    </div>
+    <button type="submit">Create Task</button>
+    <div id="form-status" class="status-msg"></div>
+  </form>
+
+  <div class="btn-row">
+    <a href="workv2.html" style="align-self:center">→ Work Log</a>
+    <button class="btn-save" onclick="fullBackup()">Full Backup</button>
+    <button class="btn-sync" onclick="pushPending()">Push Pending</button>
+    <button class="btn-import" onclick="document.getElementById('import-file').click()">Import DB</button>
+    <input type="file" id="import-file" accept=".sqlite.enc,.sqlite" style="display:none" onchange="importDB(this)" />
+    <span id="import-status" class="status-msg"></span>
+  </div>
+
+  <div class="task-list" id="task-list"></div>
+</div>
+
+<script src="https://sql.js.org/dist/sql-wasm.js"></script>
+<script>
+const GH_OWNER = "camdevelopers";
+const GH_REPO = "work2";
+const API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}`;
+const ENC_KEY_LEN = 64;
+const TABLES = ['tasks','instances','events','notes','stock','attendance'];
+
+let db = null, SQL = null, encKey = null, deviceId = null;
+
+// ─── Crypto ─────────────────────────────────────────────────────────────
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return bytes;
+}
+async function encryptData(data, keyHex) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await crypto.subtle.importKey('raw', hexToBytes(keyHex), { name: 'AES-GCM' }, false, ['encrypt']);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data);
+  const out = new Uint8Array(12 + ct.byteLength);
+  out.set(iv); out.set(new Uint8Array(ct), 12);
+  return out;
+}
+async function decryptData(encBytes, keyHex) {
+  const key = await crypto.subtle.importKey('raw', hexToBytes(keyHex), { name: 'AES-GCM' }, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: encBytes.slice(0, 12) }, key, encBytes.slice(12));
+  return new Uint8Array(pt);
+}
+
+// ─── IndexedDB ──────────────────────────────────────────────────────────
+function idbOpen() {
+  return new Promise((r, j) => { const q = indexedDB.open('office-app', 1); q.onupgradeneeded = e => { if (!e.target.result.objectStoreNames.contains('data')) e.target.result.createObjectStore('data'); }; q.onsuccess = e => r(e.target.result); q.onerror = () => j(q.error); });
+}
+async function idbGet(key) { const d = await idbOpen(); return new Promise((r, j) => { const t = d.transaction('data', 'readonly'); const q = t.objectStore('data').get(key); q.onsuccess = () => r(q.result ?? null); q.onerror = () => j(q.error); }); }
+async function idbSet(key, val) { const d = await idbOpen(); return new Promise((r, j) => { const t = d.transaction('data', 'readwrite'); t.objectStore('data').put(val, key); t.oncomplete = () => r(); t.onerror = () => j(t.error); }); }
+
+// ─── SQLite ─────────────────────────────────────────────────────────────
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS tasks (
+  row_id INTEGER PRIMARY KEY, task_id TEXT UNIQUE, name TEXT, type TEXT,
+  tdesc TEXT, config TEXT, upcoming_hrs INTEGER, current_hrs INTEGER,
+  completed_days INTEGER, created_at TEXT, synced INTEGER DEFAULT 0, is_duplicate INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS instances (
+  row_id INTEGER PRIMARY KEY, instance_id TEXT UNIQUE, task_id TEXT,
+  due_at TEXT, status TEXT, done_at TEXT, triggered_by TEXT,
+  created_at TEXT, synced INTEGER DEFAULT 0, is_duplicate INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS events (
+  row_id INTEGER PRIMARY KEY, task_id TEXT, instance_id TEXT,
+  action TEXT, ts TEXT, note TEXT, synced INTEGER DEFAULT 0, is_duplicate INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS notes (
+  row_id INTEGER PRIMARY KEY, note_id TEXT UNIQUE, text TEXT,
+  done INTEGER DEFAULT 0, created_at TEXT, edited_at TEXT,
+  synced INTEGER DEFAULT 0, is_duplicate INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS stock (
+  row_id INTEGER PRIMARY KEY, task_id TEXT, event TEXT,
+  qty INTEGER, ts TEXT, synced INTEGER DEFAULT 0, is_duplicate INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS attendance (
+  row_id INTEGER PRIMARY KEY, date TEXT, checkin TEXT, checkout TEXT,
+  seq INTEGER, synced INTEGER DEFAULT 0, is_duplicate INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY, value TEXT
+);
+`;
+
+async function initDB() {
+  SQL = await initSqlJs({ locateFile: () => 'https://sql.js.org/dist/sql-wasm.wasm' });
+  const saved = await idbGet('db_blob');
+  if (saved) {
+    db = new SQL.Database(new Uint8Array(saved));
+  } else {
+    db = new SQL.Database();
+    db.run(SCHEMA);
+    const devId = parseInt(localStorage.getItem('fe_device_id')) || 1;
+    db.run(`INSERT INTO meta VALUES ('next_row_id', ?)`, [String(devId * 1000000 + 1)]);
+    await saveDB();
+  }
+}
+
+async function saveDB() {
+  const data = db.export();
+  await idbSet('db_blob', data.buffer);
+}
+
+function nextRowId() {
+  const res = db.exec(`SELECT value FROM meta WHERE key='next_row_id'`);
+  let id;
+  if (res.length > 0 && res[0].values.length > 0) {
+    id = parseInt(res[0].values[0][0]);
+  } else {
+    const devId = parseInt(localStorage.getItem('fe_device_id')) || 1;
+    id = devId * 1000000 + 1;
+  }
+  db.run(`INSERT OR REPLACE INTO meta VALUES ('next_row_id', ?)`, [String(id + 1)]);
+  return id;
+}
+
+function getMeta(key) {
+  const res = db.exec(`SELECT value FROM meta WHERE key=?`, [key]);
+  return res.length > 0 && res[0].values.length > 0 ? res[0].values[0][0] : null;
+}
+function setMeta(key, val) {
+  db.run(`INSERT OR REPLACE INTO meta VALUES (?, ?)`, [key, val]);
+}
+
+// ─── Git API ────────────────────────────────────────────────────────────
+function authHeaders() {
+  const pat = localStorage.getItem('fe_token');
+  return { 'Authorization': `Bearer ${pat}`, 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'office-pwa' };
+}
+async function getLatestSHA() {
+  const res = await fetch(`${API}/commits/HEAD`, { headers: authHeaders() });
+  if (res.status === 409) return null;
+  if (!res.ok) throw new Error(`HEAD ${res.status}`);
+  return (await res.json()).sha;
+}
+async function listDir(path) {
+  const res = await fetch(`${API}/contents/${path}?ref=HEAD`, { headers: authHeaders() });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`List ${path}: ${res.status}`);
+  const files = await res.json();
+  return files.filter(f => f.name.endsWith('.csv') || f.name.endsWith('.enc')).map(f => f.name);
+}
+async function fetchFileBytes(path) {
+  const res = await fetch(`${API}/contents/${path}?ref=HEAD`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Fetch ${path}: ${res.status}`);
+  const data = await res.json();
+  return Uint8Array.from(atob(data.content), c => c.charCodeAt(0));
+}
+async function pushFile(path, content, message) {
+  const pat = localStorage.getItem('fe_token');
+  let body;
+  if (typeof content === 'string') {
+    body = btoa(unescape(encodeURIComponent(content)));
+  } else {
+    let binary = '';
+    for (let i = 0; i < content.length; i++) binary += String.fromCharCode(content[i]);
+    body = btoa(binary);
+  }
+  const res = await fetch(`${API}/contents/${path}`, {
+    method: 'PUT',
+    headers: { 'Authorization': `Bearer ${pat}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json', 'User-Agent': 'office-pwa' },
+    body: JSON.stringify({ message, content: body })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`Push ${path}: ${res.status} ${err.message || ''}`);
+  }
+}
+
+// ─── Sync: Push ─────────────────────────────────────────────────────────
+async function pushPending() {
+  let pushed = 0;
+  for (const table of TABLES) {
+    const res = db.exec(`SELECT row_id FROM ${table} WHERE synced=0 ORDER BY row_id`);
+    if (res.length === 0 || res[0].values.length === 0) continue;
+    for (const [rowId] of res[0].values) {
+      try {
+        const rowRes = db.exec(`SELECT * FROM ${table} WHERE row_id=?`, [rowId]);
+        const vals = rowRes[0].values[0];
+        const csvLine = `${table}|${vals.join('|')}`;
+        const encrypted = await encryptData(new TextEncoder().encode(csvLine), encKey);
+        await pushFile(`changes/${rowId}.csv`, encrypted, `${rowId} ${table}`);
+        db.run(`UPDATE ${table} SET synced=1 WHERE row_id=?`, [rowId]);
+        pushed++;
+      } catch (e) {
+        console.error(`Push ${rowId} failed:`, e);
+        break;
+      }
+    }
+  }
+  if (pushed > 0) await saveDB();
+  updateSyncBadge();
+  return pushed;
+}
+
+async function fullBackup() {
+  const blob = db.export();
+  const encrypted = await encryptData(blob, encKey);
+  await pushFile('backup/office.sqlite.enc', encrypted, 'full backup');
+  const sha = await getLatestSHA();
+  setMeta('last_backup_sha', sha || '');
+  await saveDB();
+  document.getElementById('import-status').textContent = '✓ Full backup pushed';
+  setTimeout(() => document.getElementById('import-status').textContent = '', 4000);
+}
+
+// ─── Sync: Pull ─────────────────────────────────────────────────────────
+async function doPull() {
+  const localSHA = getMeta('last_pull_sha') || '';
+  const remoteSHA = await getLatestSHA();
+  if (!remoteSHA || remoteSHA === localSHA) return 0;
+
+  let applied = 0;
+
+  // Check full backup
+  try {
+    const bakFiles = await listDir('backup');
+    if (bakFiles.includes('office.sqlite.enc')) {
+      const lastBak = getMeta('last_backup_sha') || '';
+      if (remoteSHA !== lastBak) {
+        const encBytes = await fetchFileBytes('backup/office.sqlite.enc');
+        const decrypted = await decryptData(encBytes, encKey);
+        db = new SQL.Database(decrypted);
+        setMeta('last_pull_sha', remoteSHA);
+        setMeta('last_backup_sha', remoteSHA);
+        await saveDB();
+        return -1;
+      }
+    }
+  } catch (e) { console.warn('Backup pull:', e); }
+
+  // Pull deltas
+  try {
+    const files = await listDir('changes');
+    for (const f of files) {
+      if (!f.endsWith('.csv')) continue;
+      const rowId = parseInt(f.replace('.csv', ''));
+      let found = false;
+      for (const table of TABLES) {
+        const exists = db.exec(`SELECT 1 FROM ${table} WHERE row_id=?`, [rowId]);
+        if (exists.length > 0 && exists[0].values.length > 0) { found = true; break; }
+      }
+      if (found) continue;
+
+      const encBytes = await fetchFileBytes(`changes/${f}`);
+      const decrypted = await decryptData(encBytes, encKey);
+      const line = new TextDecoder().decode(decrypted);
+      const parts = line.split('|');
+      const table = parts[0];
+      const fields = parts.slice(1);
+
+      if (!TABLES.includes(table)) continue;
+
+      try {
+        if (table === 'tasks') {
+          db.run(`INSERT OR IGNORE INTO tasks (row_id,task_id,name,type,tdesc,config,upcoming_hrs,current_hrs,completed_days,created_at,synced,is_duplicate) VALUES (?,?,?,?,?,?,?,?,?,?,1,0)`, fields);
+        } else if (table === 'instances') {
+          db.run(`INSERT OR IGNORE INTO instances (row_id,instance_id,task_id,due_at,status,done_at,triggered_by,created_at,synced,is_duplicate) VALUES (?,?,?,?,?,?,?,?,1,0)`, fields);
+        } else if (table === 'events') {
+          db.run(`INSERT OR IGNORE INTO events (row_id,task_id,instance_id,action,ts,note,synced,is_duplicate) VALUES (?,?,?,?,?,?,1,0)`, fields);
+          db.run(`UPDATE events SET is_duplicate=1 WHERE task_id=? AND instance_id=? AND action=? AND row_id != ? AND ts < ?`, [fields[1], fields[2], fields[3], fields[0], fields[4]]);
+        } else if (table === 'notes') {
+          db.run(`INSERT OR IGNORE INTO notes (row_id,note_id,text,done,created_at,edited_at,synced,is_duplicate) VALUES (?,?,?,?,?,?,1,0)`, fields);
+        } else if (table === 'stock') {
+          db.run(`INSERT OR IGNORE INTO stock (row_id,task_id,event,qty,ts,synced,is_duplicate) VALUES (?,?,?,?,?,1,0)`, fields);
+        } else if (table === 'attendance') {
+          db.run(`INSERT OR IGNORE INTO attendance (row_id,date,checkin,checkout,seq,synced,is_duplicate) VALUES (?,?,?,?,?,1,0)`, fields);
+        }
+        applied++;
+      } catch (e) { console.warn(`Apply ${rowId} to ${table}:`, e); }
+    }
+  } catch (e) { console.warn('Delta pull:', e); }
+
+  setMeta('last_pull_sha', remoteSHA);
+  await saveDB();
+  return applied;
+}
+
+// ─── Sync UI ────────────────────────────────────────────────────────────
+function updateSyncBadge() {
+  let total = 0;
+  try {
+    const res = db.exec(`SELECT (SELECT COUNT(*) FROM events WHERE synced=0) + (SELECT COUNT(*) FROM tasks WHERE synced=0) + (SELECT COUNT(*) FROM instances WHERE synced=0) + (SELECT COUNT(*) FROM notes WHERE synced=0) + (SELECT COUNT(*) FROM stock WHERE synced=0) + (SELECT COUNT(*) FROM attendance WHERE synced=0)`);
+    if (res.length > 0 && res[0].values.length > 0) total = res[0].values[0][0];
+  } catch (e) { /* ignore */ }
+  document.getElementById('sync-count').textContent = total;
+  document.getElementById('sync-badge').classList.toggle('has-pending', total > 0);
+}
+
+window.toggleSyncPanel = function() {
+  const panel = document.getElementById('sync-panel');
+  if (panel.style.display === 'block') { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  let html = '<strong>Sync Status</strong>';
+  let total = 0;
+  for (const table of TABLES) {
+    const res = db.exec(`SELECT row_id FROM ${table} WHERE synced=0 ORDER BY row_id LIMIT 10`);
+    if (res.length > 0 && res[0].values.length > 0) {
+      total += res[0].values.length;
+      html += `<div style="margin-top:0.3rem"><em>${table}:</em></div>`;
+      for (const [rid] of res[0].values) {
+        html += `<div class="row"><span>${rid}</span><button onclick="pushSingle(${rid},'${table}')">push</button></div>`;
+      }
+    }
+  }
+  if (total === 0) html += '<p class="muted">All synced ✓</p>';
+  html += `<div style="margin-top:0.5rem"><button onclick="pushPending();toggleSyncPanel();toggleSyncPanel()" style="padding:0.2rem 0.6rem;font-size:0.75rem;background:#0891b2;color:#fff;border:none;border-radius:3px;cursor:pointer">Push All</button></div>`;
+  panel.innerHTML = html;
+};
+
+window.pushSingle = async function(rowId, table) {
+  const rowRes = db.exec(`SELECT * FROM ${table} WHERE row_id=?`, [rowId]);
+  if (!rowRes.length || !rowRes[0].values.length) return;
+  const vals = rowRes[0].values[0];
+  const csvLine = `${table}|${vals.join('|')}`;
+  const encrypted = await encryptData(new TextEncoder().encode(csvLine), encKey);
+  await pushFile(`changes/${rowId}.csv`, encrypted, `${rowId} ${table}`);
+  db.run(`UPDATE ${table} SET synced=1 WHERE row_id=?`, [rowId]);
+  await saveDB();
+  updateSyncBadge();
+  toggleSyncPanel(); toggleSyncPanel();
+};
+
+// ─── Data helpers ───────────────────────────────────────────────────────
+function getTasks() {
+  const res = db.exec(`SELECT * FROM tasks WHERE is_duplicate=0 ORDER BY name`);
+  if (res.length === 0) return [];
+  const cols = res[0].columns;
+  return res[0].values.map(v => Object.fromEntries(cols.map((c, i) => [c, v[i]])));
+}
+
+// ─── Login ──────────────────────────────────────────────────────────────
+document.getElementById('loginBtn').addEventListener('click', async () => {
+  const name = document.getElementById('loginName').value.trim();
+  const token = document.getElementById('loginToken').value.trim();
+  const err = document.getElementById('login-error');
+  if (!name || !token) { err.textContent = 'Both fields required.'; err.style.display = 'block'; return; }
+  if (token.length < ENC_KEY_LEN + 36) { err.textContent = 'Token too short. Expected PAT + 64-char key.'; err.style.display = 'block'; return; }
+  encKey = token.slice(-ENC_KEY_LEN);
+  const pat = token.slice(0, -ENC_KEY_LEN);
+  try {
+    const res = await fetch('https://api.github.com/user', { headers: { 'Authorization': `Bearer ${pat}`, 'User-Agent': 'office-pwa' } });
+    if (!res.ok) throw new Error();
+  } catch { err.textContent = 'Invalid PAT.'; err.style.display = 'block'; return; }
+  localStorage.setItem('fe_token', pat);
+  localStorage.setItem('fe_user', name);
+  localStorage.setItem('fe_enc_key', encKey);
+  if (!localStorage.getItem('fe_device_id')) {
+    const d = prompt('Device number (1=PC, 2=mobile):', '1');
+    localStorage.setItem('fe_device_id', String(parseInt(d) || 1));
+  }
+  deviceId = parseInt(localStorage.getItem('fe_device_id')) || 1;
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = '';
+  document.getElementById('userLabel').textContent = name;
+  await startApp();
+});
+
+// ─── App boot ───────────────────────────────────────────────────────────
+async function startApp() {
+  await initDB();
+  encKey = localStorage.getItem('fe_enc_key');
+  deviceId = parseInt(localStorage.getItem('fe_device_id')) || 1;
+  await doPull();
+  await pushPending();
+  updateSyncBadge();
+  renderList();
+  setInterval(async () => { await doPull(); renderList(); updateSyncBadge(); }, 60000);
+}
+
+// ─── Task list ──────────────────────────────────────────────────────────
+function renderList() {
+  const tasks = getTasks();
+  const container = document.getElementById('task-list');
+  if (tasks.length === 0) { container.innerHTML = '<h3>Existing Tasks</h3><p class="muted">No tasks yet.</p>'; return; }
+  container.innerHTML = '<h3>Existing Tasks</h3>' + tasks.map(t => {
+    let extra = '';
+    const cfg = JSON.parse(t.config || '{}');
+    if (t.type === 'dependency' && cfg.triggerTaskId) {
+      const trigger = tasks.find(x => x.task_id === cfg.triggerTaskId);
+      extra = `<span class="muted" style="font-size:0.7rem">⚡ after: ${trigger ? trigger.name : cfg.triggerTaskId} + ${cfg.delay || 0} ${cfg.delayUnit || 'h'}</span>`;
+    }
+    return `<div class="task-row">
+      <div class="info"><strong>${t.name}</strong><span class="badge">${t.type}</span><span class="muted">${t.tdesc}</span>${extra}<span class="muted" style="font-size:0.7rem">up:${t.upcoming_hrs}h cur:${t.current_hrs}h done:${t.completed_days}d</span></div>
+      <button onclick="delTask('${t.task_id}')">Delete</button>
+    </div>`;
+  }).join('');
+}
+
+window.delTask = function(taskId) {
+  db.run(`DELETE FROM tasks WHERE task_id=?`, [taskId]);
+  db.run(`DELETE FROM instances WHERE task_id=?`, [taskId]);
+  db.run(`DELETE FROM events WHERE task_id=?`, [taskId]);
+  db.run(`DELETE FROM stock WHERE task_id=?`, [taskId]);
+  saveDB();
+  renderList();
+};
+
+// ─── Form ───────────────────────────────────────────────────────────────
+const typeSelect = document.getElementById('tc-type');
+const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', standalone: 'g-standalone', dependency: 'g-dep', attendance: 'g-att' };
+function updateGroups() {
+  for (const [type, id] of Object.entries(groups)) document.getElementById(id).classList.toggle('hidden', typeSelect.value !== type);
+  if (typeSelect.value === 'dependency') populateTriggerSelect();
+}
+typeSelect.addEventListener('change', updateGroups);
+updateGroups();
+
+function populateTriggerSelect() {
+  const sel = document.getElementById('dep-trigger');
+  const tasks = getTasks().filter(t => t.type !== 'dependency' && t.type !== 'attendance');
+  sel.innerHTML = '<option value="">— select trigger —</option>' + tasks.map(t => `<option value="${t.task_id}">${t.name} (${t.type})</option>`).join('');
+}
+
+document.getElementById('task-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('tc-name').value.trim();
+  const type = typeSelect.value;
+  const upcomingHrs = parseInt(document.getElementById('tc-upcoming-hrs').value) || 72;
+  const currentHrs = parseInt(document.getElementById('tc-current-hrs').value) || 24;
+  const completedDays = parseInt(document.getElementById('tc-completed-days').value) || 7;
+  let desc = '', config = {};
+  if (type === 'sequence') {
+    const n = parseInt(document.getElementById('seq-n').value) || 1;
+    const unit = document.getElementById('seq-unit').value;
+    desc = `every ${n} ${unit}`; config = { n, unit };
+  } else if (type === 'calendar') {
+    const day = parseInt(document.getElementById('cal-day').value) || 1;
+    const repeat = document.getElementById('cal-repeat').value;
+    desc = `day ${day}, ${repeat}`; config = { day, repeat };
+  } else if (type === 'quantity') {
+    const threshold = parseInt(document.getElementById('qty-threshold').value) || 0;
+    const initial = parseInt(document.getElementById('qty-initial').value) || 0;
+    desc = `threshold ${threshold}, initial ${initial}`; config = { threshold, initial };
+  } else if (type === 'standalone') {
+    const deadline = document.getElementById('standalone-deadline').value;
+    desc = deadline ? `due ${new Date(deadline).toLocaleString('en-IN')}` : 'due now'; config = { deadline: deadline || null };
+  } else if (type === 'dependency') {
+    const triggerTaskId = document.getElementById('dep-trigger').value;
+    if (!triggerTaskId) { document.getElementById('form-status').textContent = '⚠️ Select trigger'; return; }
+    const delay = parseInt(document.getElementById('dep-delay').value) || 0;
+    const delayUnit = document.getElementById('dep-delay-unit').value;
+    desc = `after trigger + ${delay} ${delayUnit}`; config = { triggerTaskId, delay, delayUnit };
+  } else if (type === 'attendance') {
+    desc = 'daily check-in/out'; config = {};
+  }
+  const taskId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const rowId = nextRowId();
+  const now = new Date().toISOString();
+  db.run(`INSERT INTO tasks (row_id,task_id,name,type,tdesc,config,upcoming_hrs,current_hrs,completed_days,created_at,synced,is_duplicate) VALUES (?,?,?,?,?,?,?,?,?,?,0,0)`,
+    [rowId, taskId, name, type, desc, JSON.stringify(config), upcomingHrs, currentHrs, completedDays, now]);
+  if (type === 'quantity' && config.initial > 0) {
+    const sRow = nextRowId();
+    db.run(`INSERT INTO stock (row_id,task_id,event,qty,ts,synced,is_duplicate) VALUES (?,?,?,?,?,0,0)`, [sRow, taskId, 'restock', config.initial, now]);
+  }
+  if (type === 'standalone') {
+    const iRow = nextRowId();
+    const dueAt = config.deadline ? new Date(config.deadline).toISOString() : now;
+    db.run(`INSERT INTO instances (row_id,instance_id,task_id,due_at,status,done_at,triggered_by,created_at,synced,is_duplicate) VALUES (?,?,?,?, 'pending', NULL, NULL, ?,0,0)`,
+      [iRow, `${taskId}-0001`, taskId, dueAt, now]);
+  }
+  await saveDB();
+  await pushPending();
+  e.target.reset();
+  updateGroups();
+  document.getElementById('form-status').textContent = `✓ "${name}" created`;
+  setTimeout(() => document.getElementById('form-status').textContent = '', 3000);
+  renderList();
+});
+
+// ─── Import DB ──────────────────────────────────────────────────────────
+window.importDB = function(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      let bytes = new Uint8Array(e.target.result);
+      if (file.name.endsWith('.enc')) bytes = await decryptData(bytes, encKey);
+      db = new SQL.Database(bytes);
+      await saveDB();
+      document.getElementById('import-status').textContent = '✓ DB loaded';
+      setTimeout(() => document.getElementById('import-status').textContent = '', 4000);
+      renderList();
+      updateSyncBadge();
+    } catch (err) {
+      document.getElementById('import-status').textContent = '✗ ' + err.message;
+    }
+    input.value = '';
+  };
+  reader.readAsArrayBuffer(file);
+};
+
+// ─── Boot ───────────────────────────────────────────────────────────────
+(async () => {
+  const pat = localStorage.getItem('fe_token');
+  const user = localStorage.getItem('fe_user');
+  encKey = localStorage.getItem('fe_enc_key');
+  if (pat && user && encKey) {
+    deviceId = parseInt(localStorage.getItem('fe_device_id')) || 1;
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display = '';
+    document.getElementById('userLabel').textContent = user;
+    await startApp();
+  }
+})();
+</script>
+</body>
+</html>   
