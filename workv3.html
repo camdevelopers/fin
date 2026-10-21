@@ -389,6 +389,30 @@ function withSpinner(btnId, fn) {
   return fn().finally(() => { btn.disabled = false; btn.innerHTML = orig; });
 }
 
+// ─── Ensure repo is ready (initial commit + first backup) ───────────────
+async function ensureRepoReady() {
+  // 1. If repo has no commits, push a .gitkeep to create one
+  const headRes = await fetch(`${API}/commits/HEAD`, { headers: authHeaders() });
+  if (headRes.status === 409) {
+    await pushFile('README.md', '# work3 sync repo', 'init');
+  }
+
+  // 2. If no backup exists in repo and local DB has data, push one
+  const bakFiles = await listDir('backup');
+  if (!bakFiles.includes('office.sqlite.enc')) {
+    const hasData = db.exec(`SELECT COUNT(*) FROM tasks`).length > 0
+      && db.exec(`SELECT COUNT(*) FROM tasks`)[0].values[0][0] > 0;
+    if (hasData) {
+      const blob = db.export();
+      const encrypted = await encryptData(blob, encKey);
+      await pushFile('backup/office.sqlite.enc', encrypted, 'initial backup');
+      const sha = await getLatestSHA();
+      setMeta('last_backup_sha', sha || '');
+      await saveDB();
+    }
+  }
+}   
+
 // ─── Sync: Push pending oplog entries ───────────────────────────────────
 async function pushPending() {
   const res = db.exec(`SELECT log_id FROM oplog WHERE synced=0 ORDER BY log_id`);
@@ -1199,6 +1223,7 @@ async function startApp() {
   await initDB();
   encKey = localStorage.getItem('fe_enc_key');
   deviceId = parseInt(localStorage.getItem('fe_device_id')) || 1;
+  await ensureRepoReady();   // ← this one line
   await doPull();
   await pushPending();
   updateSyncBadge();
