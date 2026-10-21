@@ -1033,7 +1033,7 @@ window.logAtt = async function(action) {
       const updatedRes = db.exec(`SELECT * FROM attendance WHERE row_id=?`, [attRowId]);
       const aCols = updatedRes[0].columns;
       const aRow = Object.fromEntries(aCols.map((c, i) => [c, updatedRes[0].values[0][i]]));
-      logOp('attendance', attRowId, 'UPDATE', aRow);
+      logOp('attendance', nextRowId(), 'UPDATE', aRow);
     }
   }
   const evRow = nextRowId();
