@@ -1204,7 +1204,16 @@ async function startApp() {
   updateSyncBadge();
   render();
   restoreSecPrefs();
-  setInterval(async () => { await doPull(); render(); updateSyncBadge(); }, 60000);
+  //setInterval(async () => { await doPull(); render(); updateSyncBadge(); }, 60000);
+  setInterval(async () => {
+  if (document.hidden) return; // skip when tab is in background
+  await doPull(); render(); updateSyncBadge();
+}, 60000);
+
+// Immediate pull on regaining focus
+document.addEventListener('visibilitychange', async () => {
+  if (!document.hidden) { await doPull(); render(); updateSyncBadge(); }
+});
 }
 
 // ─── Auto-boot ──────────────────────────────────────────────────────────
