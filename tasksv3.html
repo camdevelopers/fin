@@ -465,7 +465,7 @@ async function doPull() {
         setMeta('last_pull_sha', remoteSHA);
         setMeta('last_backup_sha', remoteSHA);
         await saveDB();
-        return -1; // full reset
+        //return -1; // full reset
       }
     }
   } catch (e) { console.warn('Backup pull:', e); }
