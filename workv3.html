@@ -456,10 +456,14 @@ async function fullBackup() {
   const blob = db.export();
   const encrypted = await encryptData(blob, encKey);
   await pushFile('backup/office.sqlite.enc', encrypted, 'full backup');
-  const sha = await getLatestSHA();
-  setMeta('last_backup_sha', sha || '');
+  // Get the file's content SHA (not commit SHA)
+  const res = await fetch(`${API}/contents/backup/office.sqlite.enc?ref=HEAD`, { headers: authHeaders() });
+  if (res.ok) {
+    const data = await res.json();
+    setMeta('last_backup_sha', data.sha);
+  }
   await saveDB();
-}
+}   
 
 // ─── Sync: Pull (full backup or oplog deltas) ───────────────────────────
 async function doPull() {
@@ -470,23 +474,23 @@ async function doPull() {
   let applied = 0;
 
   // Full backup check
-  try {
-    const bakFiles = await listDir('backup');
-    if (bakFiles.includes('office.sqlite.enc')) {
-      const lastBak = getMeta('last_backup_sha') || '';
-      if (remoteSHA !== lastBak) {
-        const encBytes = await fetchFileBytes('backup/office.sqlite.enc');
-        const decrypted = await decryptData(encBytes, encKey);
-        db = new SQL.Database(decrypted);
-        recomputeNextRowId();
-        setMeta('last_pull_sha', remoteSHA);
-        setMeta('last_backup_sha', remoteSHA);
-        await saveDB();
-        runDedupSweep();
-        //return -1;
-      }
+ // Full backup check (compare file content SHA, not commit SHA)
+try {
+  const bakRes = await fetch(`${API}/contents/backup/office.sqlite.enc?ref=HEAD`, { headers: authHeaders() });
+  if (bakRes.ok) {
+    const bakInfo = await bakRes.json();
+    const lastBak = getMeta('last_backup_sha') || '';
+    if (bakInfo.sha !== lastBak) {
+      const encBytes = Uint8Array.from(atob(bakInfo.content), c => c.charCodeAt(0));
+      const decrypted = await decryptData(encBytes, encKey);
+      db = new SQL.Database(decrypted);
+      recomputeNextRowId();
+      setMeta('last_backup_sha', bakInfo.sha);
+      await saveDB();
+      runDedupSweep();
     }
-  } catch (e) { console.warn('Backup pull:', e); }
+  }
+} catch (e) { console.warn('Backup pull:', e); }
 
   // Delta pull: replay oplog entries
   try {
