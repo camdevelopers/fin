@@ -641,10 +641,15 @@ async function startApp() {
   updateSyncBadge();
   renderList();
   //setInterval(async () => { await doPull(); renderList(); updateSyncBadge(); }, 60000);
-  setInterval(async () => {
-  if (document.hidden) return; // skip when tab is in background
+let lastBgPull = 0;
+setInterval(async () => {
+  if (document.hidden) {
+    const now = Date.now();
+    if (now - lastBgPull < 1800000) return; // 30 min
+    lastBgPull = now;
+  }
   await doPull(); render(); updateSyncBadge();
-}, 60000);
+}, 60000);   
 
 // Immediate pull on regaining focus
 document.addEventListener('visibilitychange', async () => {
