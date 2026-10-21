@@ -278,7 +278,7 @@ function nextRowId() {
 }
 
 // After full backup pull, recompute from this device's own max to avoid ID collision
-function recomputeNextRowId() {
+function recomputeNextRowId_old() {
   const devId = parseInt(localStorage.getItem('fe_device_id')) || 1;
   const lo = devId * 1000000, hi = (devId + 1) * 1000000;
   let maxId = 0;
@@ -289,6 +289,21 @@ function recomputeNextRowId() {
   const next = maxId > 0 ? maxId + 1 : lo + 1;
   db.run(`INSERT OR REPLACE INTO meta VALUES ('next_row_id', ?)`, [String(next)]);
 }
+
+function recomputeNextRowId() {
+  const devId = parseInt(localStorage.getItem('fe_device_id')) || 1;
+  const lo = devId * 1000000, hi = (devId + 1) * 1000000;
+  let maxId = 0;
+  for (const t of TABLES) {
+    const res = db.exec(`SELECT COALESCE(MAX(row_id),0) FROM ${t} WHERE row_id >= ${lo} AND row_id < ${hi}`);
+    if (res.length > 0 && res[0].values.length > 0) maxId = Math.max(maxId, parseInt(res[0].values[0][0]) || 0);
+  }
+  // oplog uses log_id, not row_id
+  const opRes = db.exec(`SELECT COALESCE(MAX(log_id),0) FROM oplog WHERE log_id >= ${lo} AND log_id < ${hi}`);
+  if (opRes.length > 0 && opRes[0].values.length > 0) maxId = Math.max(maxId, parseInt(opRes[0].values[0][0]) || 0);
+  const next = maxId > 0 ? maxId + 1 : lo + 1;
+  db.run(`INSERT OR REPLACE INTO meta VALUES ('next_row_id', ?)`, [String(next)]);
+}     
 
 function getMeta(key) {
   const res = db.exec(`SELECT value FROM meta WHERE key=?`, [key]);
