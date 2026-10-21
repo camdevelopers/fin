@@ -289,12 +289,24 @@ function authHeaders() {
   const pat = localStorage.getItem('fe_token');
   return { 'Authorization': `Bearer ${pat}`, 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'office-pwa' };
 }
-async function getLatestSHA() {
+async function getLatestSHA_oldway_consumemoretraffic() {
   const res = await fetch(`${API}/commits/HEAD`, { headers: authHeaders() });
   if (res.status === 409) return null;
   if (!res.ok) throw new Error(`HEAD ${res.status}`);
   return (await res.json()).sha;
 }
+async function getLatestSHA() {
+  const headers = authHeaders();
+  const etag = getMeta('last_head_etag');
+  if (etag) headers['If-None-Match'] = etag;
+  const res = await fetch(`${API}/commits/HEAD`, { headers });
+  if (res.status === 304) return null; // unchanged, skip everything
+  if (res.status === 409) return null;
+  if (!res.ok) throw new Error(`HEAD ${res.status}`);
+  const sha = (await res.json()).sha;
+  setMeta('last_head_etag', res.headers.get('ETag'));
+  return sha;
+}   
 async function listDir(path) {
   const res = await fetch(`${API}/contents/${path}?ref=HEAD`, { headers: authHeaders() });
   if (res.status === 404) return [];
@@ -628,7 +640,16 @@ async function startApp() {
   await pushPending();
   updateSyncBadge();
   renderList();
-  setInterval(async () => { await doPull(); renderList(); updateSyncBadge(); }, 60000);
+  //setInterval(async () => { await doPull(); renderList(); updateSyncBadge(); }, 60000);
+  setInterval(async () => {
+  if (document.hidden) return; // skip when tab is in background
+  await doPull(); render(); updateSyncBadge();
+}, 60000);
+
+// Immediate pull on regaining focus
+document.addEventListener('visibilitychange', async () => {
+  if (!document.hidden) { await doPull(); render(); updateSyncBadge(); }
+});
 }
 
 // ─── Task list render ───────────────────────────────────────────────────
