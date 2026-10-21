@@ -675,12 +675,12 @@ setInterval(async () => {
     if (now - lastBgPull < 1800000) return; // 30 min
     lastBgPull = now;
   }
-  await doPull(); render(); updateSyncBadge();
+  await doPull(); renderList(); updateSyncBadge();
 }, 60000);   
 
 // Immediate pull on regaining focus
 document.addEventListener('visibilitychange', async () => {
-  if (!document.hidden) { await doPull(); render(); updateSyncBadge(); }
+  if (!document.hidden) { await doPull(); renderList(); updateSyncBadge(); }
 });
 }
 
