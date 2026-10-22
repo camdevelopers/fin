@@ -475,13 +475,16 @@ async function doPull() {
 
   // Full backup check
  // Full backup check (compare file content SHA, not commit SHA)
+// Full backup check
 try {
   const bakRes = await fetch(`${API}/contents/backup/office.sqlite.enc?ref=HEAD`, { headers: authHeaders() });
   if (bakRes.ok) {
     const bakInfo = await bakRes.json();
     const lastBak = getMeta('last_backup_sha') || '';
     if (bakInfo.sha !== lastBak) {
-      const encBytes = Uint8Array.from(atob(bakInfo.content), c => c.charCodeAt(0));
+      // Use download_url for binary — avoids base64 newline issues
+      const dlRes = await fetch(bakInfo.download_url, { headers: authHeaders() });
+      const encBytes = new Uint8Array(await dlRes.arrayBuffer());
       const decrypted = await decryptData(encBytes, encKey);
       db = new SQL.Database(decrypted);
       recomputeNextRowId();
@@ -490,7 +493,7 @@ try {
       runDedupSweep();
     }
   }
-} catch (e) { console.warn('Backup pull:', e); }
+} catch (e) { console.warn('Backup pull:', e); }   
 
   // Delta pull: replay oplog entries
   try {
@@ -543,6 +546,17 @@ try {
   return applied;
 }
 
+
+
+
+async function fetchFileBytes(path) {
+  const res = await fetch(`${API}/contents/${path}?ref=HEAD`, { headers: authHeaders() });
+  if (!res.ok) throw new Error(`Fetch ${path}: ${res.status}`);
+  const data = await res.json();
+  return Uint8Array.from(atob(data.content.replace(/\s/g, '')), c => c.charCodeAt(0));
+}   
+
+  
 // ─── Dedup sweep: resolve duplicate instances after pull ────────────────
 // Groups pending instances by slot (anchored to latest done_at for sequence).
 // Higher change_number wins; tie → earlier created_at wins. Loser → is_duplicate=1.
