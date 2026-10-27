@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 500px; margin: 0 auto; padding: 1.5rem; }
+    h2 { margin-bottom: 1rem; }
+    label { display: block; font-size: 0.85rem; color: #374151; margin-top: 0.75rem; }
+    input, select { width: 100%; padding: 0.5rem; margin-top: 0.2rem; border: 1px solid #d1d5db; border-radius: 4px; }
+    button { padding: 0.5rem 1.2rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 1rem; }
+    button:hover { background: #047857; }
+    .status { font-size: 0.85rem; margin-top: 0.5rem; }
+    .status.ok { color: #059669; }
+    .status.err { color: #dc2626; }
+    a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+    .info { font-size: 0.8rem; color: #6b7280; margin-top: 0.25rem; }
+    .device-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+    .device-row label { margin-top: 0; }
+    .device-row select { width: 80px; }
+  </style>
+</head>
+<body>
+  <h2>⚙️ Sync Settings</h2>
+  <p class="info">Configure your GitHub repo for CSV sync. Files are stored in <code>sync/</code> folder.</p>
+
+  <label>GitHub Username / Owner</label>
+  <input id="set-owner" placeholder="e.g. myusername" />
+
+  <label>Repository Name</label>
+  <input id="set-repo" placeholder="e.g. office-sync" />
+
+  <label>Personal Access Token (PAT)</label>
+  <input id="set-pat" type="password" placeholder="ghp_..." />
+  <p class="info">Needs <code>repo</code> scope. Generate at github.com/settings/tokens</p>
+
+  <label>Branch</label>
+  <input id="set-branch" value="main" />
+
+  <div class="device-row">
+    <label>Device ID (optional override)</label>
+    <select id="set-device">
+      <option value="">Auto</option>
+      <option value="1">1 (PC)</option>
+      <option value="2">2 (Mobile)</option>
+    </select>
+  </div>
+
+  <button onclick="saveAndTest()">Save & Test Connection</button>
+  <div id="set-status" class="status"></div>
+
+  <a href="offwork.html">→ Back to Work Log</a>
+
+  <script>
+    (function() {
+      const s = JSON.parse(localStorage.getItem('office-settings') || '{}');
+      if (s.owner) document.getElementById('set-owner').value = s.owner;
+      if (s.repo) document.getElementById('set-repo').value = s.repo;
+      if (s.pat) document.getElementById('set-pat').value = s.pat;
+      if (s.branch) document.getElementById('set-branch').value = s.branch;
+      if (s.deviceId) document.getElementById('set-device').value = s.deviceId;
+    })();
+
+    window.saveAndTest = async function() {
+      const owner = document.getElementById('set-owner').value.trim();
+      const repo = document.getElementById('set-repo').value.trim();
+      const pat = document.getElementById('set-pat').value.trim();
+      const branch = document.getElementById('set-branch').value.trim() || 'main';
+      const deviceId = document.getElementById('set-device').value || undefined;
+      const el = document.getElementById('set-status');
+
+      if (!owner || !repo || !pat) {
+        el.textContent = '⚠️ Owner, repo, and PAT are required.';
+        el.className = 'status err';
+        return;
+      }
+
+      localStorage.setItem('office-settings', JSON.stringify({ owner, repo, pat, branch, deviceId }));
+      el.textContent = 'Testing connection…';
+      el.className = 'status';
+
+      try {
+        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+          headers: { 'Authorization': `Bearer ${pat}`, 'Accept': 'application/vnd.github+json' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          el.textContent = `✓ Connected to ${data.full_name} (default branch: ${data.default_branch})`;
+          el.className = 'status ok';
+        } else {
+          const err = await res.json().catch(() => ({}));
+          el.textContent = `✗ ${err.message || 'HTTP ' + res.status}`;
+          el.className = 'status err';
+        }
+      } catch (e) {
+        el.textContent = `✗ ${e.message}`;
+        el.className = 'status err';
+      }
+    };
+  </script>
+</body>
+</html>   
