@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasks</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
+    h2 { margin-bottom: 1rem; }
+    h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+    label { display: block; font-size: 0.85rem; color: #374151; margin-top: 0.75rem; }
+    input, select { width: 100%; padding: 0.5rem; margin-top: 0.2rem; border: 1px solid #d1d5db; border-radius: 4px; }
+    .type-group { margin-top: 0.75rem; padding: 0.75rem; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .hidden { display: none; }
+    button { padding: 0.5rem 1.2rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 1rem; }
+    button:hover { background: #047857; }
+    .task-list { margin-top: 1.5rem; }
+    .task-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
+    .task-row .info { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .task-row .badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 3px; background: #dbeafe; color: #1e40af; }
+    .task-row button { padding: 0.25rem 0.6rem; font-size: 0.8rem; background: #fee2e2; color: #991b1b; margin: 0; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+    .muted { color: #6b7280; font-size: 0.85rem; }
+    .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; align-items: center; }
+    .btn-row button { margin-top: 0; }
+    .btn-pull { background: #0891b2; }
+    .status-msg { font-size: 0.8rem; color: #059669; margin-top: 0.3rem; }
+  </style>
+</head>
+<body>
+  <h2>Create Task</h2>
+
+  <form id="task-form">
+    <label>Name</label>
+    <input id="tc-name" required placeholder="e.g. Water garden" />
+
+    <label>Type</label>
+    <select id="tc-type">
+      <option value="sequence">Sequence (every N hours/days)</option>
+      <option value="calendar">Calendar (day-based)</option>
+      <option value="quantity">Quantity (stock threshold)</option>
+      <option value="standalone">Standalone (one-time)</option>
+      <option value="dependency">Dependency (triggered by another task)</option>
+      <option value="attendance">Attendance</option>
+    </select>
+
+    <div id="g-seq" class="type-group hidden">
+      <div class="grid2">
+        <div><label>Interval</label><input id="seq-n" type="number" min="1" value="2" /></div>
+        <div><label>Unit</label><select id="seq-unit"><option value="days">Days</option><option value="hours">Hours</option></select></div>
+      </div>
+    </div>
+
+    <div id="g-cal" class="type-group hidden">
+      <label>On which day of month?</label>
+      <input id="cal-day" type="number" min="1" max="31" value="5" />
+      <label>Repeat</label>
+      <select id="cal-repeat"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select>
+    </div>
+
+    <div id="g-qty" class="type-group hidden">
+      <div class="grid2">
+        <div><label>Threshold (due when stock ≤)</label><input id="qty-threshold" type="number" min="0" value="5" /></div>
+        <div><label>Initial stock</label><input id="qty-initial" type="number" min="0" value="25" /></div>
+      </div>
+    </div>
+
+    <div id="g-standalone" class="type-group hidden">
+      <label>Deadline (optional)</label>
+      <input id="standalone-deadline" type="datetime-local" />
+    </div>
+
+    <div id="g-dep" class="type-group hidden">
+      <label>Triggered when which task is done?</label>
+      <select id="dep-trigger"></select>
+      <div class="grid2">
+        <div><label>Delay</label><input id="dep-delay" type="number" min="0" value="4" /></div>
+        <div><label>Unit</label><select id="dep-delay-unit"><option value="hours">Hours</option><option value="days">Days</option></select></div>
+      </div>
+    </div>
+
+    <div id="g-att" class="type-group hidden">
+      <p class="muted">Daily check-in/check-out.</p>
+    </div>
+
+    <div class="type-group" style="margin-top:1rem">
+      <p style="font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">Display Timing</p>
+      <div class="grid2">
+        <div><label>Upcoming: show ___ hrs before due</label><input id="tc-upcoming-hrs" type="number" min="0" value="72" /></div>
+        <div><label>Current: show ___ hrs before due</label><input id="tc-current-hrs" type="number" min="0" value="24" /></div>
+      </div>
+      <label>Completed: keep visible for ___ days</label>
+      <input id="tc-completed-days" type="number" min="0" value="7" />
+    </div>
+
+    <button type="submit">Create Task</button>
+    <div id="form-status" class="status-msg"></div>
+  </form>
+
+  <div class="btn-row">
+    <a href="offwork1.html" style="align-self:center">→ Work Log</a>
+    <button class="btn-pull" onclick="doPull()">⬇ Pull</button>
+    <span id="pull-status" class="status-msg"></span>
+  </div>
+
+  <div class="task-list" id="task-list"></div>
+
+  <script>
+    // *** HARDCODE THIS: 1 or 2 ***
+    window.DEVICE_ID = 1;
+  </script>
+  <script src="store.js"></script>
+  <script>
+    const typeSelect = document.getElementById('tc-type');
+    const groups = { sequence:'g-seq', calendar:'g-cal', quantity:'g-qty', standalone:'g-standalone', dependency:'g-dep', attendance:'g-att' };
+    function updateGroups() {
+      for (const [type, id] of Object.entries(groups))
+        document.getElementById(id).classList.toggle('hidden', typeSelect.value !== type);
+      if (typeSelect.value === 'dependency') populateTriggerSelect();
+    }
+    typeSelect.addEventListener('change', updateGroups);
+    updateGroups();
+
+    async function populateTriggerSelect() {
+      const sel = document.getElementById('dep-trigger');
+      const tasks = Store.readTasks();
+      sel.innerHTML = '<option value="">— select trigger —</option>';
+      tasks.filter(t => t.type !== 'dependency' && t.type !== 'attendance').forEach(t => {
+        sel.innerHTML += `<option value="${t.id}">${t.name} (${t.type})</option>`;
+      });
+    }
+
+    function renderList() {
+      const tasks = Store.readTasks();
+      const container = document.getElementById('task-list');
+      if (!tasks.length) { container.innerHTML = '<h3>Existing Tasks</h3><p class="muted">No tasks yet.</p>'; return; }
+      container.innerHTML = '<h3>Existing Tasks</h3>' + tasks.map(t => {
+        let extra = '';
+        if (t.type === 'dependency' && t.config.triggerTaskId) {
+          const trigger = tasks.find(x => x.id === t.config.triggerTaskId);
+          extra = `<span class="muted" style="font-size:0.7rem">⚡ after: ${trigger ? trigger.name : t.config.triggerTaskId} + ${t.config.delay || 0}${t.config.delayUnit}</span>`;
+        }
+        return `<div class="task-row"><div class="info"><strong>${t.name}</strong><span class="badge">${t.type}</span><span class="muted">${t.desc}</span>${extra}</div><button onclick="delTask('${t.id}')">Delete</button></div>`;
+      }).join('');
+    }
+
+    window.delTask = function(id) { Store.deleteTask(id); renderList(); };
+
+    document.getElementById('task-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const name = document.getElementById('tc-name').value.trim();
+      const type = typeSelect.value;
+      const upcomingHrs = parseInt(document.getElementById('tc-upcoming-hrs').value) || 72;
+      const currentHrs = parseInt(document.getElementById('tc-current-hrs').value) || 24;
+      const completedDays = parseInt(document.getElementById('tc-completed-days').value) || 7;
+      let desc = '', config = {};
+
+      if (type === 'sequence') {
+        const n = parseInt(document.getElementById('seq-n').value) || 1;
+        const unit = document.getElementById('seq-unit').value;
+        desc = `every ${n} ${unit}`; config = { n, unit };
+      } else if (type === 'calendar') {
+        const day = parseInt(document.getElementById('cal-day').value) || 1;
+        const repeat = document.getElementById('cal-repeat').value;
+        desc = `day ${day}, ${repeat}`; config = { day, repeat };
+      } else if (type === 'quantity') {
+        const threshold = parseInt(document.getElementById('qty-threshold').value) || 0;
+        const initial = parseInt(document.getElementById('qty-initial').value) || 0;
+        desc = `threshold ${threshold}, initial ${initial}`; config = { threshold, initial };
+      } else if (type === 'standalone') {
+        const deadline = document.getElementById('standalone-deadline').value;
+        desc = deadline ? `due ${new Date(deadline).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}` : 'due now';
+        config = { deadline: deadline || null };
+      } else if (type === 'dependency') {
+        const triggerTaskId = document.getElementById('dep-trigger').value;
+        if (!triggerTaskId) { document.getElementById('form-status').textContent = '⚠️ Select a trigger'; return; }
+        const delay = parseInt(document.getElementById('dep-delay').value) || 0;
+        const delayUnit = document.getElementById('dep-delay-unit').value;
+        const tasks = Store.readTasks();
+        const triggerTask = tasks.find(t => t.id === triggerTaskId);
+        desc = `after "${triggerTask ? triggerTask.name : triggerTaskId}" + ${delay} ${delayUnit}`;
+        config = { triggerTaskId, delay, delayUnit };
+      } else if (type === 'attendance') {
+        desc = 'daily check-in/out'; config = {};
+      }
+
+      const task = {
+        id: name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''),
+        name, type, desc, config, upcomingHrs, currentHrs, completedDays,
+        seqCounter: type === 'sequence' ? 0 : undefined,
+        qtyCounter: type === 'quantity' ? 0 : undefined,
+        createdAt: now().toISOString()
+      };
+      Store.writeTask(task);
+
+      if (type === 'quantity' && config.initial > 0) {
+        Store.writeStock(task.id, { qty: config.initial, events: [{ action:'restock', qty:config.initial, ts:now().toISOString() }] });
+      }
+      if (type === 'standalone') {
+        const dueAt = config.deadline ? new Date(config.deadline).toISOString() : now().toISOString();
+        const instId = genInstanceId(task, { dueAt });
+        Store.writeInstance({ id: instId, taskId: task.id, dueAt, status:'pending', createdAt:now().toISOString(), updatedAt:now().toISOString() });
+      }
+
+      e.target.reset(); updateGroups();
+      document.getElementById('form-status').textContent = `✓ "${name}" created`;
+      setTimeout(() => document.getElementById('form-status').textContent = '', 3000);
+      renderList();
+    });
+
+    window.doPull = function() {
+      const count = Store.syncPull();
+      const el = document.getElementById('pull-status');
+      el.textContent = `✓ Pulled ${count} change(s)`;
+      setTimeout(() => el.textContent = '', 3000);
+      renderList();
+    };
+
+    renderList();
+  </script>
+</body>
+</html>   
