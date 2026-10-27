@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Work Log</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
+    h2 { margin-bottom: 0.5rem; }
+    h3 { margin: 1.2rem 0 0.5rem; font-size: 0.95rem; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; }
+    .card.inactive { opacity: 0.55; }
+    .card.missed { border-left: 3px solid #dc2626; }
+    .card.done { border-left: 3px solid #059669; opacity: 0.7; }
+    .card.leave { border-left: 3px solid #f59e0b; }
+    .card.ignored { border-left: 3px solid #6b7280; opacity: 0.6; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+    .card-header strong { font-size: 0.95rem; }
+    .card-meta { font-size: 0.8rem; color: #6b7280; }
+    .badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 3px; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-done { background: #d1fae5; color: #065f46; }
+    .badge-missed { background: #fee2e2; color: #991b1b; }
+    .badge-low { background: #fee2e2; color: #991b1b; }
+    .badge-ok { background: #d1fae5; color: #065f46; }
+    .badge-standalone { background: #e5e7eb; color: #374151; }
+    .badge-dep { background: #ede9fe; color: #5b21b6; }
+    .badge-leave { background: #fef3c7; color: #92400e; }
+    .badge-ignore { background: #e5e7eb; color: #6b7280; }
+    .actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .actions button { padding: 0.3rem 0.7rem; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; font-size: 0.8rem; background: #fff; }
+    .actions button:hover { background: #f3f4f6; }
+    .actions .btn-done { background: #059669; color: #fff; border-color: #059669; }
+    .actions .btn-checkin { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .actions .btn-checkout { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .actions .btn-leave { background: #f59e0b; color: #fff; border-color: #f59e0b; }
+    .actions .btn-ignore { background: #6b7280; color: #fff; border-color: #6b7280; }
+    .stock-bar-bg { height: 6px; background: #e5e7eb; border-radius: 3px; margin-top: 0.4rem; overflow: hidden; }
+    .stock-bar-fill { height: 100%; background: #059669; border-radius: 3px; }
+    .stock-bar-fill.low { background: #dc2626; }
+    .stock-label { font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem; }
+    .att-entry { font-size: 0.85rem; padding: 0.25rem 0; border-bottom: 1px solid #f3f4f6; }
+    .att-summary { font-size: 0.9rem; font-weight: 600; margin-top: 0.5rem; padding: 0.4rem; background: #f0fdf4; border-radius: 4px; }
+    .leave-toggle { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; border: 2px solid #f59e0b; background: #fffbeb; color: #92400e; }
+    .leave-toggle.active { background: #f59e0b; color: #fff; }
+    .events-log { margin-top: 1.5rem; }
+    .event-row { font-size: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid #f3f4f6; color: #374151; }
+    .event-row .ts { color: #6b7280; }
+    a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+    .muted { color: #6b7280; }
+    .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; align-items: center; }
+    .btn-row button { padding: 0.4rem 0.8rem; border: none; border-radius: 4px; cursor: pointer; color: #fff; }
+    .btn-save { background: #7c3aed; }
+    .btn-import { background: #2563eb; }
+    .quick-add { display: flex; gap: 0.5rem; margin-bottom: 1rem; padding: 0.6rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; }
+    .quick-add input { flex: 1; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
+    .quick-add button { padding: 0.4rem 0.9rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+    .quick-add button:hover { background: #047857; }
+    .status-msg { font-size: 0.8rem; color: #059669; margin-top: 0.3rem; }
+    /* Notes */
+    .note-item { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
+    .note-item.done { opacity: 0.6; }
+    .note-item.done .note-text { text-decoration: line-through; }
+    .note-check { width: 20px; height: 20px; margin-top: 2px; cursor: pointer; accent-color: #059669; }
+    .note-text { flex: 1; font-size: 0.9rem; }
+    .note-actions { display: flex; gap: 0.3rem; }
+    .note-actions button { padding: 0.15rem 0.4rem; font-size: 0.7rem; border: 1px solid #d1d5db; border-radius: 3px; cursor: pointer; background: #fff; }
+    .note-actions button:hover { background: #f3f4f6; }
+    .note-actions .btn-del { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+    .note-add-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .note-add-row input { flex: 1; padding: 0.4rem 0.6rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
+    .note-add-row button { padding: 0.4rem 0.9rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+    .note-edit-input { flex: 1; padding: 0.3rem 0.5rem; border: 1px solid #2563eb; border-radius: 4px; font-size: 0.9rem; }
+    .note-edit-btns { display: flex; gap: 0.3rem; }
+    .note-edit-btns button { padding: 0.2rem 0.5rem; font-size: 0.75rem; border: none; border-radius: 3px; cursor: pointer; }
+    .note-edit-btns .btn-save-note { background: #059669; color: #fff; }
+    .note-edit-btns .btn-cancel-note { background: #e5e7eb; color: #374151; }
+    /* Inline stock input */
+    .stock-input-row { display: flex; gap: 0.3rem; align-items: center; margin-top: 0.4rem; }
+    .stock-input-row input { width: 60px; padding: 0.25rem 0.4rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.8rem; }
+    .stock-input-row button { padding: 0.25rem 0.6rem; font-size: 0.75rem; border: none; border-radius: 4px; cursor: pointer; background: #2563eb; color: #fff; }
+    /* Sections */
+    #sec-attendance, #sec-missed, #sec-leave, #sec-current, #sec-upcoming, #sec-completed, #sec-notes, #sec-ignored {
+      border: 2px solid #111111;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      margin: 0.75rem 0;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    }
+    #sec-attendance h3, #sec-missed h3, #sec-leave h3,
+    #sec-current h3, #sec-upcoming h3, #sec-completed h3,
+    #sec-notes h3, #sec-ignored h3 { margin-top: 0; }
+    #sec-ignored { border-left: 4px solid #6b7280; }
+    #sec-leave { border-left: 4px solid #f59e0b; }
+    details#sec-ignored summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <h2>Work Log</h2>
+
+  <div class="quick-add">
+    <input id="quick-add-input" placeholder="Quick add: type a job and press Add…" />
+    <button onclick="quickAdd()">Add</button>
+  </div>
+
+  <div id="sec-attendance"></div>
+  <div id="sec-missed"></div>
+  <div id="sec-leave"></div>
+  <div id="sec-current"></div>
+  <div id="sec-upcoming"></div>
+  <div id="sec-completed"></div>
+  <div id="sec-notes"></div>
+  <details id="sec-ignored"><summary>🚫 Ignored</summary><div id="sec-ignored-content"></div></details>
+
+  <div class="btn-row">
+    <a href="tasks.html">→ Manage Tasks</a>
+    <button class="btn-save" onclick="saveToDisk()">Save to Disk</button>
+    <button class="btn-import" onclick="document.getElementById('import-file').click()">Import from Disk</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importFromDisk(this)" />
+    <span id="import-status" class="status-msg"></span>
+  </div>
+
+  <div class="events-log" id="events-log"></div>
+
+  <script>
+    // ============================================================
+    // DATA ACCESS LAYER (DAL)
+    // Single read/write path. Add CSV logging, sync, etc. here.
+    // ============================================================
+    const DAL = {
+      _db: null,
+
+      async _open() {
+        if (this._db) return this._db;
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open('office-app', 1);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('data')) db.createObjectStore('data');
+          };
+          req.onsuccess = (e) => { this._db = e.target.result; resolve(this._db); };
+          req.onerror = () => reject(req.error);
+        });
+      },
+
+      async read(key) {
+        const db = await this._open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('data', 'readonly');
+          const req = tx.objectStore('data').get(key);
+          req.onsuccess = () => resolve(req.result ?? null);
+          req.onerror = () => reject(req.error);
+        });
+      },
+
+      async write(key, value) {
+        const db = await this._open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('data', 'readwrite');
+          tx.objectStore('data').put(value, key);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      },
+
+      async getTasks()      { return (await this.read('tasks')) || []; },
+      async saveTasks(t)    { await this.write('tasks', t); },
+      async getInstances()  { return (await this.read('instances')) || []; },
+      async saveInstances(i){ await this.write('instances', i); },
+      async getEvents()     { return (await this.read('events')) || []; },
+      async saveEvents(e)   { await this.write('events', e); },
+      async getNotes()      { return (await this.read('notes')) || []; },
+      async saveNotes(n)    { await this.write('notes', n); },
+      async getStock(id)    { return (await this.read('stock_' + id)) || { qty: 0, events: [] }; },
+      async saveStock(id,s) { await this.write('stock_' + id, s); },
+      async isLeaveActive() { return (await this.read('leave_active')) === true; },
+      async setLeaveActive(v){ await this.write('leave_active', v); },
+    };
+
+    // ============================================================
+    // INSTANCE ID GENERATOR
+    // ============================================================
+    function genInstanceId(task, context = {}) {
+      switch (task.type) {
+        case 'sequence': {
+          const n = task.seqCounter || 0;
+          return `${task.id}-s${n}`;
+        }
+        case 'calendar': {
+          const d = context.dueAt ? new Date(context.dueAt) : new Date();
+          return `${task.id}-c${d.toISOString().slice(0, 10)}`;
+        }
+        case 'quantity': {
+          const n = task.qtyCounter || 0;
+          return `${task.id}-q${n}`;
+        }
+        case 'standalone': {
+          const rand = Math.random().toString(36).slice(2, 8);
+          return `${task.id}-r${rand}`;
+        }
+        case 'dependency': {
+          const triggerId = context.triggerInstanceId || 'unknown';
+          const d = context.dueAt ? new Date(context.dueAt) : new Date();
+          return `${triggerId}-D${d.toISOString().slice(0, 10)}`;
+        }
+        default:
+          return `${task.id}-x${Date.now().toString(36)}`;
+      }
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    const now = () => new Date();
+    const todayStr = () => now().toISOString().slice(0, 10);
+    const hrsFromNow = (h) => { const d = new Date(); d.setHours(d.getHours() + h); return d; };
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '';
+    const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '';
+    const fmtDuration = (ms) => {
+      const hrs = Math.floor(ms / 3600000);
+      const mins = Math.floor((ms % 3600000) / 60000);
+      return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+    };
+
+    // ============================================================
+    // QUICK ADD
+    // ============================================================
+    window.quickAdd = async function() {
+      const input = document.getElementById('quick-add-input');
+      const name = input.value.trim();
+      if (!name) return;
+      const tasks = await DAL.getTasks();
+      const id = `job-${Date.now().toString(36)}`;
+      tasks.push({ id, name, type: 'standalone', desc: 'unplanned', config: { deadline: null }, upcomingHrs: 0, currentHrs: 9999, completedDays: 3, createdAt: now().toISOString() });
+      await DAL.saveTasks(tasks);
+      const instances = await DAL.getInstances();
+      const instId = genInstanceId({ id, type: 'standalone' });
+      instances.push({ id: instId, taskId: id, dueAt: now().toISOString(), status: 'pending', createdAt: now().toISOString(), updatedAt: now().toISOString() });
+      await DAL.saveInstances(instances);
+      input.value = '';
+      render();
+    };
+    document.getElementById('quick-add-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); quickAdd(); } });
+
+    // ============================================================
+    // INSTANCE GENERATION ENGINE
+    // ============================================================
+    async function generateInstances() {
+      const tasks = await DAL.getTasks();
+      let instances = await DAL.getInstances();
+      let changed = false;
+      const leaveActive = await DAL.isLeaveActive();
+
+      for (const task of tasks) {
+        if (task.type === 'attendance') continue;
+
+        const taskInstances = instances.filter(i => i.taskId === task.id);
+        // Treat 'done' and 'ignore' as terminal for "is there a pending?" check
+        const lastDone = taskInstances.filter(i => i.status === 'done' || i.status === 'ignore').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+        const pending = taskInstances.filter(i => i.status === 'pending' || i.status === 'doing' || i.status === 'will_do' || i.status === 'leave');
+
+        if (task.type === 'sequence') {
+          if (pending.length === 0) {
+            let next;
+            if (lastDone) {
+              next = new Date(lastDone.updatedAt);
+              if (task.config.unit === 'hours') next.setHours(next.getHours() + task.config.n);
+              else next.setDate(next.getDate() + task.config.n);
+            } else {
+              next = new Date();
+            }
+            if (next <= hrsFromNow(task.upcomingHrs + 1)) {
+              const instId = genInstanceId(task);
+              if (!instances.find(i => i.id === instId)) {
+                const status = leaveActive ? 'leave' : 'pending';
+                instances.push({ id: instId, taskId: task.id, dueAt: next.toISOString(), status, createdAt: now().toISOString(), updatedAt: now().toISOString() });
+                changed = true;
+              }
+            }
+          }
+        }
+
+        else if (task.type === 'calendar') {
+          if (pending.length === 0) {
+            const next = nextCalendarDue(task);
+            if (next && next <= hrsFromNow(task.upcomingHrs + 1)) {
+              const instId = genInstanceId(task, { dueAt: next });
+              if (!instances.find(i => i.id === instId)) {
+                const status = leaveActive ? 'leave' : 'pending';
+                instances.push({ id: instId, taskId: task.id, dueAt: next.toISOString(), status, createdAt: now().toISOString(), updatedAt: now().toISOString() });
+                changed = true;
+              }
+            }
+          }
+        }
+
+        else if (task.type === 'quantity') {
+          const stock = await DAL.getStock(task.id);
+          if (stock.qty <= task.config.threshold && pending.length === 0) {
+            const instId = genInstanceId(task);
+            if (!instances.find(i => i.id === instId)) {
+              const status = leaveActive ? 'leave' : 'pending';
+              instances.push({ id: instId, taskId: task.id, dueAt: now().toISOString(), status, createdAt: now().toISOString(), updatedAt: now().toISOString() });
+              changed = true;
+            }
+          }
+        }
+
+        else if (task.type === 'dependency') {
+          if (pending.length === 0) {
+            const triggerTaskId = task.config.triggerTaskId;
+            const triggerInstances = instances.filter(i => i.taskId === triggerTaskId);
+            const triggerDone = triggerInstances.filter(i => i.status === 'done').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+
+            if (triggerDone) {
+              const delayMs = task.config.delayUnit === 'days'
+                ? (task.config.delay || 0) * 86400000
+                : (task.config.delay || 0) * 3600000;
+              const dueAt = new Date(new Date(triggerDone.updatedAt).getTime() + delayMs);
+
+              if (dueAt <= hrsFromNow(task.upcomingHrs + 1)) {
+                const instId = genInstanceId(task, { triggerInstanceId: triggerDone.id, dueAt });
+                if (!instances.find(i => i.id === instId)) {
+                  const status = leaveActive ? 'leave' : 'pending';
+                  instances.push({ id: instId, taskId: task.id, dueAt: dueAt.toISOString(), status, createdAt: now().toISOString(), updatedAt: now().toISOString(), triggeredBy: triggerDone.id });
+                  changed = true;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (changed) await DAL.saveInstances(instances);
+    }
+
+    function nextCalendarDue(task) {
+      const d = new Date();
+      d.setDate(task.config.day);
+      d.setHours(23, 59, 59, 999);
+      if (task.config.repeat === 'monthly') {
+        if (d <= now()) d.setMonth(d.getMonth() + 1);
+      } else if (task.config.repeat === 'quarterly') {
+        const qStart = Math.floor(d.getMonth() / 3) * 3;
+        d.setMonth(qStart, task.config.day);
+        d.setHours(23, 59, 59, 999);
+        if (d <= now()) { d.setMonth(Math.floor(d.getMonth() / 3) + 1, 1); d.setMonth(d.getMonth(), task.config.day); d.setHours(23, 59, 59, 999); }
+      } else if (task.config.repeat === 'annual') {
+        d.setMonth(0, task.config.day);
+        d.setHours(23, 59, 59, 999);
+        if (d <= now()) d.setFullYear(d.getFullYear() + 1);
+      }
+      return d;
+    }
+
+    // ============================================================
+    // LEAVE TOGGLE
+    // ============================================================
+    window.toggleLeave = async function() {
+      const active = await DAL.isLeaveActive();
+      const newValue = !active;
+      await DAL.setLeaveActive(newValue);
+
+      if (newValue) {
+        // Mark all current-window pending instances as 'leave'
+        const tasks = await DAL.getTasks();
+        const instances = await DAL.getInstances();
+        let changed = false;
+        for (const inst of instances) {
+          if (inst.status === 'pending' || inst.status === 'doing' || inst.status === 'will_do') {
+            const task = tasks.find(t => t.id === inst.taskId);
+            if (task) {
+              const due = new Date(inst.dueAt);
+              const hrsUntil = (due - now()) / 3600000;
+              if (hrsUntil <= task.currentHrs) {
+                inst.status = 'leave';
+                inst.updatedAt = now().toISOString();
+                changed = true;
+              }
+            }
+          }
+        }
+        if (changed) await DAL.saveInstances(instances);
+      }
+      render();
+    };
+
+    // ============================================================
+    // NOTES
+    // ============================================================
+    let editingNoteId = null;
+
+    async function renderNotes() {
+      const container = document.getElementById('sec-notes');
+      const notes = await DAL.getNotes();
+
+      let html = '<h3>📝 Notes</h3>';
+      html += `<div class="note-add-row">
+        <input id="note-new-input" placeholder="Add a note…" />
+        <button onclick="addNote()">Add</button>
+      </div>`;
+
+      if (notes.length === 0) {
+        html += '<p class="muted">No notes.</p>';
+      } else {
+        html += notes.map(n => {
+          if (n.id === editingNoteId) {
+            return `<div class="note-item">
+              <input class="note-edit-input" id="note-edit-${n.id}" value="${n.text.replace(/"/g, '&quot;')}" />
+              <div class="note-edit-btns">
+                <button class="btn-save-note" onclick="saveNoteEdit('${n.id}')">Save</button>
+                <button class="btn-cancel-note" onclick="cancelNoteEdit()">Cancel</button>
+              </div>
+            </div>`;
+          }
+          return `<div class="note-item${n.done ? ' done' : ''}">
+            <input type="checkbox" class="note-check" ${n.done ? 'checked' : ''} onchange="toggleNote('${n.id}')" />
+            <span class="note-text" ondblclick="startNoteEdit('${n.id}')">${n.text}</span>
+            <div class="note-actions">
+              <button onclick="startNoteEdit('${n.id}')">Edit</button>
+              <button class="btn-del" onclick="deleteNote('${n.id}')">Del</button>
+            </div>
+          </div>`;
+        }).join('');
+      }
+
+      container.innerHTML = html;
+
+      const input = document.getElementById('note-new-input');
+      if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addNote(); } });
+
+      if (editingNoteId) {
+        const editInput = document.getElementById(`note-edit-${editingNoteId}`);
+        if (editInput) {
+          editInput.focus();
+          editInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); saveNoteEdit(editingNoteId); }
+            if (e.key === 'Escape') { cancelNoteEdit(); }
+          });
+        }
+      }
+    }
+
+    window.addNote = async function() {
+      const input = document.getElementById('note-new-input');
+      const text = input.value.trim();
+      if (!text) return;
+      const notes = await DAL.getNotes();
+      notes.push({ id: `n-${Date.now().toString(36)}`, text, done: false, createdAt: now().toISOString() });
+      await DAL.saveNotes(notes);
+      renderNotes();
+    };
+
+    window.toggleNote = async function(id) {
+      const notes = await DAL.getNotes();
+      const n = notes.find(x => x.id === id);
+      if (n) n.done = !n.done;
+      await DAL.saveNotes(notes);
+      renderNotes();
+    };
+
+    window.startNoteEdit = function(id) { editingNoteId = id; renderNotes(); };
+    window.cancelNoteEdit = function() { editingNoteId = null; renderNotes(); };
+
+    window.saveNoteEdit = async function(id) {
+      const input = document.getElementById(`note-edit-${id}`);
+      const text = input ? input.value.trim() : '';
+      if (!text) return;
+      const notes = await DAL.getNotes();
+      const n = notes.find(x => x.id === id);
+      if (n) { n.text = text; n.editedAt = now().toISOString(); }
+      await DAL.saveNotes(notes);
+      editingNoteId = null;
+      renderNotes();
+    };
+
+    let confirmingDeleteId = null;
+    window.deleteNote = async function(id) {
+      if (confirmingDeleteId === id) {
+        const notes = await DAL.getNotes();
+        await DAL.saveNotes(notes.filter(n => n.id !== id));
+        confirmingDeleteId = null;
+        renderNotes();
+      } else {
+        confirmingDeleteId = id;
+        renderNotes();
+      }
+    };
+
+    // ============================================================
+    // STOCK INLINE INPUT
+    // ============================================================
+    let stockInputTaskId = null;
+    let stockInputAction = null;
+
+    // ============================================================
+    // MAIN RENDER
+    // ============================================================
+    async function render() {
+      await generateInstances();
+
+      const tasks = await DAL.getTasks();
+      const instances = await DAL.getInstances();
+      const events = await DAL.getEvents();
+      const today = todayStr();
+      const leaveActive = await DAL.isLeaveActive();
+
+      // --- Attendance ---
+      const attTasks = tasks.filter(t => t.type === 'attendance');
+      const attContainer = document.getElementById('sec-attendance');
+      if (attTasks.length > 0) {
+        const attEvents = events.filter(e => e.taskId === 'attendance' && e.ts.slice(0, 10) === today);
+        let html = '<h3>🕐 Attendance (Today)</h3>';
+
+        // Total time present
+        let totalMs = 0;
+        for (let i = 0; i < attEvents.length; i++) {
+          if (attEvents[i].action === 'checkin') {
+            const next = attEvents[i + 1];
+            if (next && next.action === 'checkout') {
+              totalMs += new Date(next.ts) - new Date(attEvents[i].ts);
+            }
+          }
+        }
+        html += `<div class="att-summary">Total present: <strong>${totalMs > 0 ? fmtDuration(totalMs) : '0m'}</strong></div>`;
+
+        if (attEvents.length > 0) {
+          let i = 0;
+          while (i < attEvents.length) {
+            const ev = attEvents[i];
+            if (ev.action === 'checkin') {
+              const next = attEvents[i + 1];
+              const checkout = next && next.action === 'checkout' ? next : null;
+              html += `<div class="card"><div class="att-entry"><strong>#${Math.ceil((i + 1) / 2)}</strong> In: <strong>${fmtTime(ev.ts)}</strong> | Out: <strong>${checkout ? fmtTime(checkout.ts) : '—'}</strong></div></div>`;
+              i += checkout ? 2 : 1;
+            } else { i++; }
+          }
+        } else { html += '<p class="muted">No entries yet.</p>'; }
+
+        const lastEv = attEvents[attEvents.length - 1];
+        if (!lastEv || lastEv.action === 'checkout') {
+          html += `<div class="actions"><button class="btn-checkin" onclick="logAtt('checkin')">Check In</button></div>`;
+        } else {
+          html += `<div class="actions"><button class="btn-checkout" onclick="logAtt('checkout')">Check Out</button></div>`;
+        }
+
+        // Leave toggle
+        html += `<div class="leave-toggle${leaveActive ? ' active' : ''}" onclick="toggleLeave()">${leaveActive ? '🏖 On Leave — tap to end' : '🏖 On Leave'}</div>`;
+
+        attContainer.innerHTML = html;
+      } else { attContainer.innerHTML = ''; }
+
+      // --- Categorize ---
+      const missed = [], leave = [], current = [], upcoming = [], completed = [], ignored = [];
+
+      for (const task of tasks) {
+        if (task.type === 'attendance') continue;
+
+        if (task.type === 'quantity') {
+          const stock = await DAL.getStock(task.id);
+          const isLow = stock.qty <= task.config.threshold;
+          const pendingInst = instances.find(i => i.taskId === task.id && (i.status === 'pending' || i.status === 'leave'));
+          const lastDoneInst = instances.filter(i => i.taskId === task.id && i.status === 'done').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+          current.push({ task, instance: pendingInst || null, stock, isLow, inactive: !isLow && !pendingInst });
+          if (lastDoneInst && withinCompletedWindow(lastDoneInst, task)) completed.push({ task, instance: lastDoneInst });
+          continue;
+        }
+
+        const taskInstances = instances.filter(i => i.taskId === task.id);
+
+        // Ignored instances
+        const ignoredInsts = taskInstances.filter(i => i.status === 'ignore');
+        ignoredInsts.forEach(inst => ignored.push({ task, instance: inst }));
+
+        const pendingInst = taskInstances.find(i => i.status === 'pending' || i.status === 'doing' || i.status === 'will_do');
+        const leaveInst = taskInstances.find(i => i.status === 'leave');
+        const lastDoneInst = taskInstances.filter(i => i.status === 'done').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+
+        // Leave instances
+        if (leaveInst) {
+          leave.push({ task, instance: leaveInst });
+        }
+
+        if (pendingInst) {
+          const due = new Date(pendingInst.dueAt);
+          const hrsUntil = (due - now()) / 3600000;
+          if (hrsUntil < 0) missed.push({ task, instance: pendingInst });
+          else if (hrsUntil <= task.currentHrs) current.push({ task, instance: pendingInst });
+          else if (hrsUntil <= task.upcomingHrs) upcoming.push({ task, instance: pendingInst });
+        }
+        if (lastDoneInst && withinCompletedWindow(lastDoneInst, task)) completed.push({ task, instance: lastDoneInst });
+      }
+
+      // --- Render sections ---
+      document.getElementById('sec-missed').innerHTML = renderSection('⚠️ Missed', missed, renderCard);
+      document.getElementById('sec-leave').innerHTML = renderSection('🏖 Leave', leave, renderCard);
+      document.getElementById('sec-current').innerHTML = renderSection('📋 Current', current, renderCard);
+      document.getElementById('sec-upcoming').innerHTML = renderSection('📅 Upcoming', upcoming, renderCard);
+      document.getElementById('sec-completed').innerHTML = renderSection('✅ Completed', completed, renderDoneCard);
+      document.getElementById('sec-ignored-content').innerHTML = renderSection('', ignored, renderIgnoredCard);
+      renderNotes();
+
+      // --- Event log ---
+      const logContainer = document.getElementById('events-log');
+      if (events.length > 0) {
+        logContainer.innerHTML = '<h3>📜 Event Log (last 20)</h3>' +
+          events.slice(-20).reverse().map(e =>
+            `<div class="event-row"><span class="ts">${new Date(e.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> <strong>${e.action}</strong> ${e.taskId}${e.note ? ' — ' + e.note : ''}</div>`
+          ).join('');
+      } else { logContainer.innerHTML = ''; }
+    }
+
+    function withinCompletedWindow(inst, task) {
+      const done = new Date(inst.updatedAt);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - task.completedDays);
+      return done >= cutoff;
+    }
+
+    function renderSection(title, items, renderFn) {
+      if (items.length === 0) return title ? `<h3>${title}</h3><p class="muted">Nothing here.</p>` : '<p class="muted">Nothing here.</p>';
+      return (title ? `<h3>${title}</h3>` : '') + items.map(renderFn).join('');
+    }
+
+    function renderCard({ task, instance, stock, isLow, inactive }) {
+      let html = `<div class="card${inactive ? ' inactive' : ''}${instance && instance.status === 'leave' ? ' leave' : ''}">`;
+      html += `<div class="card-header"><strong>${task.name}</strong>`;
+
+      if (task.type === 'dependency') {
+        html += `<span class="badge badge-dep">⚡ dependency</span>`;
+      } else if (task.type === 'standalone') {
+        html += `<span class="badge badge-standalone">one-time</span>`;
+      } else {
+        const badgeClass = instance ? (instance.status === 'leave' ? 'badge-leave' : 'badge-pending') : (isLow ? 'badge-low' : 'badge-ok');
+        const badgeText = instance ? (instance.status === 'leave' ? 'leave' : instance.status) : (isLow ? 'LOW' : 'ok');
+        html += `<span class="badge ${badgeClass}">${badgeText}</span>`;
+      }
+      html += `</div>`;
+
+      if (task.type === 'dependency' && instance && instance.triggeredBy) {
+        const triggerTask = tasksCache.find(t => t.id === task.config.triggerTaskId);
+        html += `<div class="card-meta">⚡ Triggered by: ${triggerTask ? triggerTask.name : task.config.triggerTaskId}</div>`;
+      }
+
+      if (instance) {
+        const due = new Date(instance.dueAt);
+        const hrsUntil = Math.round((due - now()) / 3600000);
+        html += `<div class="card-meta">Due: ${fmtDate(due)} ${fmtTime(due)} (${hrsUntil > 0 ? hrsUntil + 'h from now' : Math.abs(hrsUntil) + 'h ago'})</div>`;
+      }
+
+      if (task.type === 'quantity' && stock) {
+        const threshold = task.config.threshold;
+        const max = Math.max(stock.qty, threshold * 3, 10);
+        const pct = Math.min((stock.qty / max) * 100, 100);
+        html += `<div class="stock-label">Stock: <strong>${stock.qty}</strong> / threshold ${threshold}</div>`;
+        html += `<div class="stock-bar-bg"><div class="stock-bar-fill${isLow ? ' low' : ''}" style="width:${pct}%"></div></div>`;
+
+        if (stockInputTaskId === task.id) {
+          html += `<div class="stock-input-row">
+            <input id="stock-qty-input" type="number" min="1" value="1" placeholder="Qty" />
+            <button onclick="confirmStock()">${stockInputAction === 'consume' ? 'Consume' : 'Restock'}</button>
+            <button style="background:#e5e7eb;color:#374151" onclick="cancelStockInput()">✕</button>
+          </div>`;
+        } else {
+          html += `<div class="actions"><button onclick="showStockInput('${task.id}','consume')">Consume</button><button onclick="showStockInput('${task.id}','restock')">Restock</button></div>`;
+        }
+      }
+
+      // Action buttons — shown for non-done, non-ignore, non-quantity instances
+      if (instance && instance.status !== 'done' && instance.status !== 'ignore' && task.type !== 'quantity') {
+        const canIgnore = task.type !== 'sequence' && task.type !== 'quantity';
+        html += `<div class="actions">`;
+        if (instance.status !== 'leave') {
+          html += `<button onclick="logAction('${instance.id}','${task.id}','will_do')">Will do</button>`;
+          html += `<button onclick="logAction('${instance.id}','${task.id}','doing')">Doing</button>`;
+          html += `<button class="btn-leave" onclick="logAction('${instance.id}','${task.id}','leave')">Leave</button>`;
+        }
+        html += `<button class="btn-done" onclick="logAction('${instance.id}','${task.id}','done')">Done</button>`;
+        if (canIgnore) {
+          html += `<button class="btn-ignore" onclick="logAction('${instance.id}','${task.id}','ignore')">Ignore</button>`;
+        }
+        html += `</div>`;
+      }
+
+      html += `</div>`;
+      return html;
+    }
+
+    function renderDoneCard({ task, instance }) {
+      let extra = '';
+      if (task.type === 'dependency' && instance.triggeredBy) {
+        const triggerTask = tasksCache.find(t => t.id === task.config.triggerTaskId);
+        extra = `<div class="card-meta">⚡ Triggered by: ${triggerTask ? triggerTask.name : task.config.triggerTaskId}</div>`;
+      }
+      return `<div class="card done">
+        <div class="card-header"><strong>${task.name}</strong><span class="badge badge-done">done</span></div>
+        ${extra}
+        <div class="card-meta">Done: ${fmtDate(instance.updatedAt)} ${fmtTime(instance.updatedAt)}</div>
+      </div>`;
+    }
+
+    function renderIgnoredCard({ task, instance }) {
+      return `<div class="card ignored">
+        <div class="card-header"><strong>${task.name}</strong><span class="badge badge-ignore">ignored</span></div>
+        <div class="card-meta">Ignored: ${fmtDate(instance.updatedAt)} ${fmtTime(instance.updatedAt)}</div>
+      </div>`;
+    }
+
+    // ============================================================
+    // STOCK INLINE INPUT
+    // ============================================================
+    window.showStockInput = function(taskId, action) {
+      stockInputTaskId = taskId;
+      stockInputAction = action;
+      render();
+    };
+    window.cancelStockInput = function() {
+      stockInputTaskId = null;
+      stockInputAction = null;
+      render();
+    };
+    window.confirmStock = async function() {
+      const input = document.getElementById('stock-qty-input');
+      const qty = parseInt(input ? input.value : '1');
+      if (!qty || qty < 1) return;
+      const taskId = stockInputTaskId;
+      const action = stockInputAction;
+      stockInputTaskId = null;
+      stockInputAction = null;
+
+      const stock = await DAL.getStock(taskId);
+      stock.qty += action === 'restock' ? qty : -qty;
+      stock.events.push({ action, qty, ts: now().toISOString() });
+      await DAL.saveStock(taskId, stock);
+
+      const events = await DAL.getEvents();
+      events.push({ ts: now().toISOString(), taskId, action, note: String(qty) });
+      await DAL.saveEvents(events);
+      render();
+    };
+
+    // ============================================================
+    // ACTIONS
+    // ============================================================
+    let tasksCache = [];
+
+    window.logAction = async function(instanceId, taskId, action) {
+      const instances = await DAL.getInstances();
+      const inst = instances.find(i => i.id === instanceId);
+      if (inst) {
+        // Merge rule: done is terminal — never overwrite a done instance
+        if (inst.status === 'done') return;
+        inst.status = action;
+        inst.updatedAt = now().toISOString();
+        if (action === 'done') inst.doneAt = now().toISOString();
+        await DAL.saveInstances(instances);
+
+        // Increment counter for sequence/quantity when done or ignored
+        if (action === 'done' || action === 'ignore') {
+          const tasks = await DAL.getTasks();
+          const task = tasks.find(t => t.id === taskId);
+          if (task) {
+            if (task.type === 'sequence') { task.seqCounter = (task.seqCounter || 0) + 1; }
+            if (task.type === 'quantity') { task.qtyCounter = (task.qtyCounter || 0) + 1; }
+            await DAL.saveTasks(tasks);
+          }
+        }
+      }
+      const events = await DAL.getEvents();
+      events.push({ ts: now().toISOString(), taskId, instanceId, action, note: '' });
+      await DAL.saveEvents(events);
+      render();
+    };
+
+    window.logAtt = async function(action) {
+      const events = await DAL.getEvents();
+      events.push({ ts: now().toISOString(), taskId: 'attendance', action, note: '' });
+      await DAL.saveEvents(events);
+      render();
+    };
+
+    // ============================================================
+    // SAVE / IMPORT
+    // ============================================================
+    window.saveToDisk = async function() {
+      const tasks = await DAL.getTasks();
+      const stock = {};
+      for (const t of tasks) { if (t.type === 'quantity') stock[t.id] = await DAL.getStock(t.id); }
+      const data = { tasks, instances: await DAL.getInstances(), events: await DAL.getEvents(), stock, notes: await DAL.getNotes(), leave_active: await DAL.isLeaveActive(), exportedAt: now().toISOString() };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `office_work_${todayStr()}.json`;
+      a.click();
+    };
+
+    window.importFromDisk = function(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.tasks) await DAL.write('tasks', data.tasks);
+          if (data.instances) await DAL.write('instances', data.instances);
+          if (data.events) await DAL.write('events', data.events);
+          if (data.stock) { for (const [taskId, stock] of Object.entries(data.stock)) { await DAL.write('stock_' + taskId, stock); } }
+          if (data.notes) await DAL.write('notes', data.notes);
+          if (data.leave_active !== undefined) await DAL.write('leave_active', data.leave_active);
+          document.getElementById('import-status').textContent = `✓ Imported (${data.exportedAt ? new Date(data.exportedAt).toLocaleString() : ''})`;
+          setTimeout(() => document.getElementById('import-status').textContent = '', 4000);
+          render();
+        } catch (err) {
+          document.getElementById('import-status').textContent = `✗ ${err.message}`;
+        }
+        input.value = '';
+      };
+      reader.readAsText(file);
+    };
+
+    // ============================================================
+    // BOOT
+    // ============================================================
+    async function boot() {
+      tasksCache = await DAL.getTasks();
+      render();
+    }
+    boot();
+    setInterval(render, 60000);
+  </script>
+</body>
+</html>   
