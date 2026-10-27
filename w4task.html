@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasks - Create</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
+    h2 { margin-bottom: 1rem; }
+    h3 { margin-top: 1.5rem; margin-bottom: 0.5rem; }
+    label { display: block; font-size: 0.85rem; color: #374151; margin-top: 0.75rem; }
+    input, select { width: 100%; padding: 0.5rem; margin-top: 0.2rem; border: 1px solid #d1d5db; border-radius: 4px; }
+    .type-group { margin-top: 0.75rem; padding: 0.75rem; background: #f9fafb; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .hidden { display: none; }
+    button { padding: 0.5rem 1.2rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 1rem; }
+    button:hover { background: #047857; }
+    .task-list { margin-top: 1.5rem; }
+    .task-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
+    .task-row .info { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .task-row .badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 3px; background: #dbeafe; color: #1e40af; }
+    .task-row button { padding: 0.25rem 0.6rem; font-size: 0.8rem; background: #fee2e2; color: #991b1b; margin: 0; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+    .muted { color: #6b7280; font-size: 0.85rem; }
+    .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; align-items: center; }
+    .btn-row button { margin-top: 0; }
+    .btn-import { background: #2563eb; }
+    .btn-import:hover { background: #1d4ed8; }
+    .btn-save { background: #7c3aed; }
+    .btn-save:hover { background: #6d28d9; }
+    .status-msg { font-size: 0.8rem; color: #059669; margin-top: 0.3rem; }
+  </style>
+</head>
+<body>
+  <h2>Create Task</h2>
+
+  <form id="task-form">
+    <label>Name</label>
+    <input id="tc-name" required placeholder="e.g. Water garden" />
+
+    <label>Type</label>
+    <select id="tc-type">
+      <option value="sequence">Sequence (every N hours/days)</option>
+      <option value="calendar">Calendar (day-based)</option>
+      <option value="quantity">Quantity (stock threshold)</option>
+      <option value="standalone">Standalone (one-time)</option>
+      <option value="dependency">Dependency (triggered by another task)</option>
+      <option value="attendance">Attendance</option>
+    </select>
+
+    <div id="g-seq" class="type-group hidden">
+      <div class="grid2">
+        <div><label>Interval</label><input id="seq-n" type="number" min="1" value="2" /></div>
+        <div><label>Unit</label><select id="seq-unit"><option value="days">Days</option><option value="hours">Hours</option></select></div>
+      </div>
+    </div>
+
+    <div id="g-cal" class="type-group hidden">
+      <label>On which day of month?</label>
+      <input id="cal-day" type="number" min="1" max="31" value="5" />
+      <label>Repeat</label>
+      <select id="cal-repeat"><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annual">Annual</option></select>
+    </div>
+
+    <div id="g-qty" class="type-group hidden">
+      <div class="grid2">
+        <div><label>Threshold (due when stock ≤)</label><input id="qty-threshold" type="number" min="0" value="5" /></div>
+        <div><label>Initial stock</label><input id="qty-initial" type="number" min="0" value="25" /></div>
+      </div>
+    </div>
+
+    <div id="g-standalone" class="type-group hidden">
+      <label>Deadline (optional — leave blank for "due now")</label>
+      <input id="standalone-deadline" type="datetime-local" />
+    </div>
+
+    <div id="g-dep" class="type-group hidden">
+      <label>Triggered when which task is done?</label>
+      <select id="dep-trigger"></select>
+      <div class="grid2">
+        <div><label>Delay</label><input id="dep-delay" type="number" min="0" value="4" /></div>
+        <div><label>Unit</label><select id="dep-delay-unit"><option value="hours">Hours</option><option value="days">Days</option></select></div>
+      </div>
+      <p class="muted" style="margin-top:0.5rem">Hidden until trigger is done, then appears after the delay.</p>
+    </div>
+
+    <div id="g-att" class="type-group hidden">
+      <p class="muted">Daily check-in/check-out. No extra config needed.</p>
+    </div>
+
+    <div class="type-group" style="margin-top:1rem">
+      <p style="font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">Display Timing</p>
+      <div class="grid2">
+        <div><label>Upcoming: show ___ hrs before due</label><input id="tc-upcoming-hrs" type="number" min="0" value="72" /></div>
+        <div><label>Current: show ___ hrs before due</label><input id="tc-current-hrs" type="number" min="0" value="24" /></div>
+      </div>
+      <label>Completed: keep visible for ___ days after done</label>
+      <input id="tc-completed-days" type="number" min="0" value="7" />
+    </div>
+
+    <button type="submit">Create Task</button>
+    <div id="form-status" class="status-msg"></div>
+  </form>
+
+  <div class="btn-row">
+    <a href="work.html" style="align-self:center">→ Go to Work Log</a>
+    <button class="btn-save" onclick="saveToDisk()">Save to Disk</button>
+    <button class="btn-import" onclick="document.getElementById('import-file').click()">Import from Disk</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importFromDisk(this)" />
+    <span id="import-status" class="status-msg"></span>
+  </div>
+
+  <div class="task-list" id="task-list"></div>
+
+  <script>
+    // ============================================================
+    // DATA ACCESS LAYER (DAL)
+    // All reads/writes go through this object.
+    // To add CSV logging, sync, or any other backend, modify
+    // DAL.read() and DAL.write() — nothing else needs to change.
+    // ============================================================
+    const DAL = {
+      _db: null,
+
+      async _open() {
+        if (this._db) return this._db;
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open('office-app', 1);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('data')) db.createObjectStore('data');
+          };
+          req.onsuccess = (e) => { this._db = e.target.result; resolve(this._db); };
+          req.onerror = () => reject(req.error);
+        });
+      },
+
+      /** Read a value by key. Returns null if not found. */
+      async read(key) {
+        const db = await this._open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('data', 'readonly');
+          const req = tx.objectStore('data').get(key);
+          req.onsuccess = () => resolve(req.result ?? null);
+          req.onerror = () => reject(req.error);
+        });
+      },
+
+      /** Write a value by key. This is the single write path. */
+      async write(key, value) {
+        const db = await this._open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('data', 'readwrite');
+          tx.objectStore('data').put(value, key);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      },
+
+      // --- Convenience accessors (all go through read/write above) ---
+      async getTasks()      { return (await this.read('tasks')) || []; },
+      async saveTasks(t)    { await this.write('tasks', t); },
+      async getInstances()  { return (await this.read('instances')) || []; },
+      async saveInstances(i){ await this.write('instances', i); },
+      async getEvents()     { return (await this.read('events')) || []; },
+      async saveEvents(e)   { await this.write('events', e); },
+      async getNotes()      { return (await this.read('notes')) || []; },
+      async saveNotes(n)    { await this.write('notes', n); },
+      async getStock(id)    { return (await this.read('stock_' + id)) || { qty: 0, events: [] }; },
+      async saveStock(id,s) { await this.write('stock_' + id, s); },
+      async isLeaveActive() { return (await this.read('leave_active')) === true; },
+      async setLeaveActive(v){ await this.write('leave_active', v); },
+    };
+
+    // ============================================================
+    // INSTANCE ID GENERATOR
+    // Deterministic where possible, for cross-device sync.
+    // ============================================================
+    function genInstanceId(task, context = {}) {
+      switch (task.type) {
+        case 'sequence': {
+          const n = task.seqCounter || 0;
+          return `${task.id}-s${n}`;
+        }
+        case 'calendar': {
+          const d = context.dueAt ? new Date(context.dueAt) : new Date();
+          return `${task.id}-c${d.toISOString().slice(0, 10)}`;
+        }
+        case 'quantity': {
+          const n = task.qtyCounter || 0;
+          return `${task.id}-q${n}`;
+        }
+        case 'standalone': {
+          const rand = Math.random().toString(36).slice(2, 8);
+          return `${task.id}-r${rand}`;
+        }
+        case 'dependency': {
+          const triggerId = context.triggerInstanceId || 'unknown';
+          const d = context.dueAt ? new Date(context.dueAt) : new Date();
+          return `${triggerId}-D${d.toISOString().slice(0, 10)}`;
+        }
+        default:
+          return `${task.id}-x${Date.now().toString(36)}`;
+      }
+    }
+
+    // ============================================================
+    // UI LOGIC
+    // ============================================================
+    const typeSelect = document.getElementById('tc-type');
+    const groups = { sequence: 'g-seq', calendar: 'g-cal', quantity: 'g-qty', standalone: 'g-standalone', dependency: 'g-dep', attendance: 'g-att' };
+    function updateGroups() {
+      for (const [type, id] of Object.entries(groups)) {
+        document.getElementById(id).classList.toggle('hidden', typeSelect.value !== type);
+      }
+      if (typeSelect.value === 'dependency') populateTriggerSelect();
+    }
+    typeSelect.addEventListener('change', updateGroups);
+    updateGroups();
+
+    async function populateTriggerSelect() {
+      const sel = document.getElementById('dep-trigger');
+      const tasks = await DAL.getTasks();
+      sel.innerHTML = '<option value="">— select trigger task —</option>';
+      tasks.filter(t => t.type !== 'dependency' && t.type !== 'attendance').forEach(t => {
+        sel.innerHTML += `<option value="${t.id}">${t.name} (${t.type})</option>`;
+      });
+    }
+
+    async function renderList() {
+      const tasks = await DAL.getTasks();
+      const container = document.getElementById('task-list');
+      if (tasks.length === 0) { container.innerHTML = '<h3>Existing Tasks</h3><p class="muted">No tasks yet.</p>'; return; }
+      container.innerHTML = '<h3>Existing Tasks</h3>' + tasks.map(t => {
+        let extra = '';
+        if (t.type === 'dependency' && t.config.triggerTaskId) {
+          const trigger = tasks.find(x => x.id === t.config.triggerTaskId);
+          const delayStr = t.config.delay ? `${t.config.delay} ${t.config.delayUnit}` : '0h';
+          extra = `<span class="muted" style="font-size:0.7rem">⚡ after: ${trigger ? trigger.name : t.config.triggerTaskId} + ${delayStr}</span>`;
+        }
+        return `
+        <div class="task-row">
+          <div class="info">
+            <strong>${t.name}</strong>
+            <span class="badge">${t.type}</span>
+            <span class="muted">${t.desc}</span>
+            ${extra}
+            <span class="muted" style="font-size:0.7rem">up:${t.upcomingHrs}h cur:${t.currentHrs}h done:${t.completedDays}d</span>
+          </div>
+          <button onclick="delTask('${t.id}')">Delete</button>
+        </div>`;
+      }).join('');
+    }
+
+    window.delTask = async function(id) {
+      const tasks = await DAL.getTasks();
+      await DAL.saveTasks(tasks.filter(t => t.id !== id));
+      renderList();
+    };
+
+    document.getElementById('task-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('tc-name').value.trim();
+      const type = typeSelect.value;
+      const upcomingHrs = parseInt(document.getElementById('tc-upcoming-hrs').value) || 72;
+      const currentHrs = parseInt(document.getElementById('tc-current-hrs').value) || 24;
+      const completedDays = parseInt(document.getElementById('tc-completed-days').value) || 7;
+
+      let desc = '', config = {};
+
+      if (type === 'sequence') {
+        const n = parseInt(document.getElementById('seq-n').value) || 1;
+        const unit = document.getElementById('seq-unit').value;
+        desc = `every ${n} ${unit}`;
+        config = { n, unit };
+      } else if (type === 'calendar') {
+        const day = parseInt(document.getElementById('cal-day').value) || 1;
+        const repeat = document.getElementById('cal-repeat').value;
+        desc = `day ${day}, ${repeat}`;
+        config = { day, repeat };
+      } else if (type === 'quantity') {
+        const threshold = parseInt(document.getElementById('qty-threshold').value) || 0;
+        const initial = parseInt(document.getElementById('qty-initial').value) || 0;
+        desc = `threshold ${threshold}, initial ${initial}`;
+        config = { threshold, initial };
+      } else if (type === 'standalone') {
+        const deadline = document.getElementById('standalone-deadline').value;
+        desc = deadline ? `due ${new Date(deadline).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'due now';
+        config = { deadline: deadline || null };
+      } else if (type === 'dependency') {
+        const triggerTaskId = document.getElementById('dep-trigger').value;
+        if (!triggerTaskId) { document.getElementById('form-status').textContent = '⚠️ Select a trigger task'; return; }
+        const delay = parseInt(document.getElementById('dep-delay').value) || 0;
+        const delayUnit = document.getElementById('dep-delay-unit').value;
+        const tasks = await DAL.getTasks();
+        const triggerTask = tasks.find(t => t.id === triggerTaskId);
+        desc = `after "${triggerTask ? triggerTask.name : triggerTaskId}" + ${delay} ${delayUnit}`;
+        config = { triggerTaskId, delay, delayUnit };
+      } else if (type === 'attendance') {
+        desc = 'daily check-in/out';
+        config = {};
+      }
+
+      const task = {
+        id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+        name, type, desc, config,
+        upcomingHrs, currentHrs, completedDays,
+        seqCounter: type === 'sequence' ? 0 : undefined,
+        qtyCounter: type === 'quantity' ? 0 : undefined,
+        createdAt: new Date().toISOString()
+      };
+
+      const tasks = await DAL.getTasks();
+      tasks.push(task);
+      await DAL.saveTasks(tasks);
+
+      if (type === 'quantity' && config.initial > 0) {
+        await DAL.saveStock(task.id, { qty: config.initial, events: [{ action: 'restock', qty: config.initial, ts: new Date().toISOString() }] });
+      }
+
+      if (type === 'standalone') {
+        const instances = await DAL.getInstances();
+        const dueAt = config.deadline ? new Date(config.deadline).toISOString() : new Date().toISOString();
+        const instId = genInstanceId(task, { dueAt });
+        instances.push({ id: instId, taskId: task.id, dueAt, status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+        await DAL.saveInstances(instances);
+      }
+
+      e.target.reset();
+      updateGroups();
+      document.getElementById('form-status').textContent = `✓ "${name}" created`;
+      setTimeout(() => document.getElementById('form-status').textContent = '', 3000);
+      renderList();
+    });
+
+    window.saveToDisk = async function() {
+      const tasks = await DAL.getTasks();
+      const stock = {};
+      for (const t of tasks) { if (t.type === 'quantity') stock[t.id] = await DAL.getStock(t.id); }
+      const data = {
+        tasks,
+        instances: await DAL.getInstances(),
+        events: await DAL.getEvents(),
+        stock,
+        notes: await DAL.getNotes(),
+        leave_active: await DAL.isLeaveActive(),
+        exportedAt: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `office_backup_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+    };
+
+    window.importFromDisk = function(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.tasks) await DAL.write('tasks', data.tasks);
+          if (data.instances) await DAL.write('instances', data.instances);
+          if (data.events) await DAL.write('events', data.events);
+          if (data.stock) { for (const [taskId, stock] of Object.entries(data.stock)) { await DAL.write('stock_' + taskId, stock); } }
+          if (data.notes) await DAL.write('notes', data.notes);
+          if (data.leave_active !== undefined) await DAL.write('leave_active', data.leave_active);
+          document.getElementById('import-status').textContent = `✓ Imported (${data.exportedAt ? new Date(data.exportedAt).toLocaleString() : ''})`;
+          setTimeout(() => document.getElementById('import-status').textContent = '', 4000);
+          renderList();
+        } catch (err) {
+          document.getElementById('import-status').textContent = `✗ ${err.message}`;
+        }
+        input.value = '';
+      };
+      reader.readAsText(file);
+    };
+
+    renderList();
+  </script>
+</body>
+</html>   
