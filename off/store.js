@@ -192,21 +192,23 @@ const Store = {
   },
 
   // --- MERGE MANAGER ---
-  mergeProcess() {
-    const d = _loadLocal();
-    const pending = (d.changes || []).filter(c => c.pulled === 1 && c.applied === 0);
+mergeProcess() {
+    const pending = this.readChanges({ pulled: 1, applied: 0 });
     pending.sort((a, b) => new Date(a.ts) - new Date(b.ts));
 
     for (const change of pending) {
       try {
         this._mergeOne(change);
-        change.applied = 1;
       } catch (err) {
         console.error(`[Merge] ${change.changeId}:`, err);
+        continue;
       }
+      // Mark applied — reload fresh state each time to avoid clobbering
+      const d = _loadLocal();
+      const c = (d.changes || []).find(x => x.changeId === change.changeId);
+      if (c) { c.applied = 1; _saveLocal(d); }
     }
-    _saveLocal(d);
-  },
+},
 
   _mergeOne(change) {
     const payload = JSON.parse(change.payloadJSON);
