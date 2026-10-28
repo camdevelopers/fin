@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 500px; margin: 0 auto; padding: 1.5rem; }
+    h2 { margin-bottom: 1rem; }
+    h3 { margin: 1.5rem 0 0.5rem; font-size: 0.95rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3rem; }
+    label { display: block; font-size: 0.85rem; color: #374151; margin-top: 0.75rem; }
+    input, select { width: 100%; padding: 0.5rem; margin-top: 0.2rem; border: 1px solid #d1d5db; border-radius: 4px; }
+    button { padding: 0.5rem 1.2rem; background: #059669; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 0.75rem; }
+    button:hover { background: #047857; }
+    .btn-snapshot { background: #7c3aed; }
+    .btn-snapshot:hover { background: #6d28d9; }
+    .btn-restore { background: #dc2626; }
+    .btn-restore:hover { background: #b91c1c; }
+    .status { font-size: 0.85rem; margin-top: 0.5rem; }
+    .status.ok { color: #059669; }
+    .status.err { color: #dc2626; }
+    a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+    .info { font-size: 0.8rem; color: #6b7280; margin-top: 0.25rem; }
+    .device-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+    .device-row label { margin-top: 0; }
+    .device-row select { width: 80px; }
+    .hint-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.6rem; margin-top: 0.75rem; font-size: 0.8rem; color: #374151; }
+    .hint-box code { background: #e5e7eb; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.75rem; }
+    .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+    .btn-row button { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <h2>⚙️ Sync Settings</h2>
+
+  <h3>GitHub Connection</h3>
+
+  <label>GitHub Username / Owner</label>
+  <input id="set-owner" placeholder="e.g. camdevelopers" />
+
+  <label>Repository Name</label>
+  <input id="set-repo" placeholder="e.g. office1" />
+
+  <label>Personal Access Token (PAT)</label>
+  <input id="set-pat" type="password" placeholder="ghp_..." />
+  <p class="info">Needs <code>repo</code> scope. Generate at github.com/settings/tokens</p>
+
+  <label>Branch</label>
+  <input id="set-branch" value="main" />
+
+  <div class="device-row">
+    <label>Device ID (optional override)</label>
+    <select id="set-device">
+      <option value="">Auto</option>
+      <option value="1">1 (PC)</option>
+      <option value="2">2 (Mobile)</option>
+    </select>
+  </div>
+
+  <h3>Encryption</h3>
+
+  <label>Encryption Key (64-char hex)</label>
+  <input id="set-enc" type="password" placeholder="64-character hex string" maxlength="64" />
+  <p class="info">AES-256-GCM. All data on git is encrypted with this key. <strong>Back this up — losing it means losing all synced data.</strong></p>
+
+  <div class="btn-row">
+    <button onclick="saveAndTest()">Save & Test</button>
+  </div>
+  <div id="set-status" class="status"></div>
+
+  <h3>Snapshot</h3>
+  <p class="info">Creates an encrypted full-state backup on git. Use for fresh installs or to reduce repo size.</p>
+
+  <div class="btn-row">
+    <button class="btn-snapshot" onclick="doSnapshot()">📦 Create Snapshot</button>
+    <button class="btn-restore" onclick="doRestore()">♻️ Restore from Snapshot</button>
+  </div>
+  <div id="snap-status" class="status"></div>
+
+  <div id="cleanup-hint" class="hint-box" style="display:none"></div>
+
+  <a href="offwork.html">→ Back to Work Log</a>
+
+  <script>
+    // Load existing settings
+    (function() {
+      const s = JSON.parse(localStorage.getItem('office-settings') || '{}');
+      if (s.owner) document.getElementById('set-owner').value = s.owner;
+      if (s.repo) document.getElementById('set-repo').value = s.repo;
+      if (s.pat) document.getElementById('set-pat').value = s.pat;
+      if (s.branch) document.getElementById('set-branch').value = s.branch;
+      if (s.deviceId) document.getElementById('set-device').value = s.deviceId;
+      if (s.encKey) document.getElementById('set-enc').value = s.encKey;
+    })();
+
+    function saveSettings() {
+      const owner = document.getElementById('set-owner').value.trim();
+      const repo = document.getElementById('set-repo').value.trim();
+      const pat = document.getElementById('set-pat').value.trim();
+      const branch = document.getElementById('set-branch').value.trim() || 'main';
+      const deviceId = document.getElementById('set-device').value || undefined;
+      const encKey = document.getElementById('set-enc').value.trim();
+      localStorage.setItem('office-settings', JSON.stringify({ owner, repo, pat, branch, deviceId, encKey }));
+    }
+
+    window.saveAndTest = async function() {
+      const owner = document.getElementById('set-owner').value.trim();
+      const repo = document.getElementById('set-repo').value.trim();
+      const pat = document.getElementById('set-pat').value.trim();
+      const encKey = document.getElementById('set-enc').value.trim();
+      const el = document.getElementById('set-status');
+
+      if (!owner || !repo || !pat) {
+        el.textContent = '⚠️ Owner, repo, and PAT are required.';
+        el.className = 'status err';
+        return;
+      }
+      if (encKey && encKey.length !== 64) {
+        el.textContent = '⚠️ Encryption key must be exactly 64 hex characters.';
+        el.className = 'status err';
+        return;
+      }
+      if (encKey && !/^[0-9a-fA-F]{64}$/.test(encKey)) {
+        el.textContent = '⚠️ Encryption key must be valid hex (0-9, a-f).';
+        el.className = 'status err';
+        return;
+      }
+
+      saveSettings();
+      el.textContent = 'Testing connection…';
+      el.className = 'status';
+
+      try {
+        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+          headers: { 'Authorization': `Bearer ${pat}`, 'Accept': 'application/vnd.github+json' }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          el.textContent = `✓ Connected to ${data.full_name} (branch: ${data.default_branch})`;
+          el.className = 'status ok';
+        } else {
+          const err = await res.json().catch(() => ({}));
+          el.textContent = `✗ ${err.message || 'HTTP ' + res.status}`;
+          el.className = 'status err';
+        }
+      } catch (e) {
+        el.textContent = `✗ ${e.message}`;
+        el.className = 'status err';
+      }
+      showCleanupHint();
+    };
+
+    window.doSnapshot = async function() {
+      const el = document.getElementById('snap-status');
+      el.textContent = '📦 Creating snapshot…';
+      el.className = 'status';
+      try {
+        const seq = await Store.createSnapshot();
+        el.textContent = `✓ Snapshot created (seq ${seq}). You can now delete older CSVs.`;
+        el.className = 'status ok';
+        showCleanupHint();
+      } catch (err) {
+        el.textContent = `✗ ${err.message}`;
+        el.className = 'status err';
+      }
+    };
+
+    window.doRestore = async function() {
+      const el = document.getElementById('snap-status');
+      if (!confirm('This will REPLACE all local data with the snapshot. Continue?')) return;
+      el.textContent = '♻️ Restoring…';
+      el.className = 'status';
+      try {
+        const seq = await Store.restoreFromSnapshot();
+        el.textContent = `✓ Restored from snapshot (seq ${seq}). Now pull deltas to get latest changes.`;
+        el.className = 'status ok';
+        showCleanupHint();
+      } catch (err) {
+        el.textContent = `✗ ${err.message}`;
+        el.className = 'status err';
+      }
+    };
+
+    function showCleanupHint() {
+      const box = document.getElementById('cleanup-hint');
+      const s = JSON.parse(localStorage.getItem('office-settings') || '{}');
+      const d = JSON.parse(localStorage.getItem(`app_data_${s.deviceId || (window.innerWidth < 768 ? 2 : 1)}`) || '{}');
+      const snapshotSeq = d.meta?.snapshotSeq;
+      if (!snapshotSeq) { box.style.display = 'none'; return; }
+
+      const seqStr = String(snapshotSeq).padStart(4, '0');
+      box.style.display = 'block';
+      box.innerHTML = `
+        <strong>🧹 Cleanup hint:</strong><br>
+        Snapshot taken at seq <code>${snapshotSeq}</code>. You can safely delete from your repo's <code>sync/</code> folder:<br>
+        • Device 1: <code>1${'0000'}</code> through <code>1${seqStr}</code><br>
+        • Device 2: <code>2${'0000'}</code> through <code>2${seqStr}</code><br>
+        <span class="info">Keep <code>snapshot.db</code> and all files with seq &gt; ${snapshotSeq}.</span>
+      `;
+    }
+
+    showCleanupHint();
+  </script>
+</body>
+</html>   
