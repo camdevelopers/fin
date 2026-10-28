@@ -126,12 +126,26 @@ window.signOut = function() {
 };
 
 window.signIn = function() {
-  const s = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
-  if (!s) {
-    document.getElementById('set-status').textContent = '⚠️ No backup found. Sign out first.';
+  let s = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
+
+  // If no backup, grab from current input fields (in case user just filled them)
+  if (!s || !s.pat) {
+    s = {
+      owner: document.getElementById('set-owner').value.trim(),
+      repo: document.getElementById('set-repo').value.trim(),
+      pat: document.getElementById('set-pat').value.trim(),
+      branch: document.getElementById('set-branch').value.trim() || 'main',
+      deviceId: document.getElementById('set-device').value || undefined,
+      encKey: document.getElementById('set-enc').value.trim(),
+    };
+  }
+
+  if (!s.pat || !s.owner || !s.repo) {
+    document.getElementById('set-status').textContent = '⚠️ No settings found. Fill the form and hit Save & Test first.';
     document.getElementById('set-status').className = 'status err';
     return;
   }
+
   localStorage.setItem('office-settings', JSON.stringify(s));
   document.getElementById('set-owner').value = s.owner || '';
   document.getElementById('set-repo').value = s.repo || '';
@@ -139,8 +153,8 @@ window.signIn = function() {
   document.getElementById('set-branch').value = s.branch || 'main';
   document.getElementById('set-device').value = s.deviceId || '';
   document.getElementById('set-enc').value = s.encKey || '';
-  document.getElementById('set-status').textContent = '✓ Signed in. Settings restored (data is fresh — pull to sync).';
-  document.getElementById('set-status').className = 'status ok';
+  document.getElementById('set-status').textContent = `✓ Signed in. encKey: ${s.encKey ? 'set (' + s.encKey.length + ' chars)' : 'MISSING'}`;
+  document.getElementById('set-status').className = s.encKey ? 'status ok' : 'status err';
   showCleanupHint();
 };   
 
