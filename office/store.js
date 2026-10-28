@@ -210,22 +210,20 @@ const Store = {
   },
 
   // --- MANUAL PULL ---
- async syncPull() {
+async syncPull() {
   const settings = getSettings();
   if (!settings.pat || !settings.repo || !settings.owner) throw new Error('No GitHub settings');
 
-  // List all commits touching sync/ (no since param — dedup handles it)
-  //const commitsUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/commits?path=sync&per_page=100`;
-   const commitsUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/commits?sha=${settings.branch || 'main'}&path=sync&per_page=100`;   
-
-  const res = await fetch(commitsUrl, {
+  // List all files in sync/ directory
+  const listUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/sync?ref=${settings.branch || 'main'}`;
+  const res = await fetch(listUrl, {
     headers: {
       'Authorization': `Bearer ${settings.pat}`,
       'Accept': 'application/vnd.github+json'
     }
   });
-  if (!res.ok) throw new Error(`Commits API: HTTP ${res.status}`);
-  const commits = await res.json();
+  if (!res.ok) throw new Error(`List sync/: HTTP ${res.status}`);
+  const files = await res.json();
 
   const myPrefix = String(DEVICE_ID);
   const existingIds = new Set(this.readChanges().map(c => c.changeId));
@@ -233,48 +231,43 @@ const Store = {
   d.changes = d.changes || [];
   let pulledCount = 0;
 
-  for (const commit of commits) {
-    for (const file of (commit.files || [])) {
-      const fname = file.filename.replace('sync/', '').replace('.csv', '');
-      if (fname.startsWith(myPrefix)) continue;
-      if (existingIds.has(fname)) continue;
+  for (const file of files) {
+    if (file.type !== 'file') continue;
+    const fname = file.name.replace('.csv', '');
+    if (fname.startsWith(myPrefix)) continue;
+    if (existingIds.has(fname)) continue;
 
-      const fileUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/sync/${fname}?ref=${commit.sha}`;
-      const fRes = await fetch(fileUrl, {
-        headers: {
-          'Authorization': `Bearer ${settings.pat}`,
-          'Accept': 'application/vnd.github+json'
-        }
-      });
-      if (!fRes.ok) continue;
-      const fData = await fRes.json();
-      const content = atob(fData.content);
+    // Fetch file content
+    const fRes = await fetch(file.download_url, {
+      headers: { 'Authorization': `Bearer ${settings.pat}` }
+    });
+    if (!fRes.ok) continue;
+    const content = await fRes.text();
 
-      const lines = content.split('\n').filter(l => l.trim());
-      if (lines.length < 2) continue;
-      const dataLine = lines[1];
-      const c1 = dataLine.indexOf(',');
-      const c2 = dataLine.indexOf(',', c1 + 1);
-      const tableName = dataLine.slice(0, c1);
-      const opType = dataLine.slice(c1 + 1, c2);
-      let payload = dataLine.slice(c2 + 1);
-      if (payload.startsWith('"') && payload.endsWith('"')) {
-        payload = payload.slice(1, -1).replace(/""/g, '"');
-      }
-
-      d.changes.push({
-        changeId: fname, tableName, opType,
-        payloadJSON: payload,
-        synced: 1, pulled: 1, applied: 0,
-        ts: new Date().toISOString()
-      });
-      existingIds.add(fname);
-      pulledCount++;
+    // Parse CSV
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length < 2) continue;
+    const dataLine = lines[1];
+    const c1 = dataLine.indexOf(',');
+    const c2 = dataLine.indexOf(',', c1 + 1);
+    const tableName = dataLine.slice(0, c1);
+    const opType = dataLine.slice(c1 + 1, c2);
+    let payload = dataLine.slice(c2 + 1);
+    if (payload.startsWith('"') && payload.endsWith('"')) {
+      payload = payload.slice(1, -1).replace(/""/g, '"');
     }
+
+    d.changes.push({
+      changeId: fname, tableName, opType,
+      payloadJSON: payload,
+      synced: 1, pulled: 1, applied: 0,
+      ts: new Date().toISOString()
+    });
+    existingIds.add(fname);
+    pulledCount++;
   }
 
   _saveLocal(d);
-
   if (pulledCount > 0) this.mergeProcess();
   return pulledCount;
 },   
