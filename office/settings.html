@@ -96,7 +96,6 @@
 const BACKUP_KEY = 'office-settings-backup';
 
 window.signOut = function() {
-  // Save current values as backup
   const s = {
     owner: document.getElementById('set-owner').value.trim(),
     repo: document.getElementById('set-repo').value.trim(),
@@ -106,8 +105,14 @@ window.signOut = function() {
     encKey: document.getElementById('set-enc').value.trim(),
   };
   localStorage.setItem(BACKUP_KEY, JSON.stringify(s));
-  // Clear active settings
+
+  // Clear settings
   localStorage.removeItem('office-settings');
+
+  // Clear ALL app data for both devices
+  localStorage.removeItem('app_data_1');
+  localStorage.removeItem('app_data_2');
+
   // Clear inputs
   document.getElementById('set-owner').value = '';
   document.getElementById('set-repo').value = '';
@@ -115,7 +120,8 @@ window.signOut = function() {
   document.getElementById('set-branch').value = 'main';
   document.getElementById('set-device').value = '';
   document.getElementById('set-enc').value = '';
-  document.getElementById('set-status').textContent = '🔒 Signed out. Use "Sign In" to restore.';
+
+  document.getElementById('set-status').textContent = '🔒 Signed out. All local data cleared. Use "Sign In" to restore settings.';
   document.getElementById('set-status').className = 'status err';
 };
 
@@ -126,20 +132,38 @@ window.signIn = function() {
     document.getElementById('set-status').className = 'status err';
     return;
   }
-  // Restore to active settings
   localStorage.setItem('office-settings', JSON.stringify(s));
-  // Restore to inputs
   document.getElementById('set-owner').value = s.owner || '';
   document.getElementById('set-repo').value = s.repo || '';
   document.getElementById('set-pat').value = s.pat || '';
   document.getElementById('set-branch').value = s.branch || 'main';
   document.getElementById('set-device').value = s.deviceId || '';
   document.getElementById('set-enc').value = s.encKey || '';
-  document.getElementById('set-status').textContent = '✓ Signed in. Settings restored.';
+  document.getElementById('set-status').textContent = '✓ Signed in. Settings restored (data is fresh — pull to sync).';
   document.getElementById('set-status').className = 'status ok';
   showCleanupHint();
 };   
 
+
+
+window.signIn = function() {
+  const s = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
+  if (!s) {
+    document.getElementById('set-status').textContent = '⚠️ No backup found. Sign out first.';
+    document.getElementById('set-status').className = 'status err';
+    return;
+  }
+  localStorage.setItem('office-settings', JSON.stringify(s));
+  document.getElementById('set-owner').value = s.owner || '';
+  document.getElementById('set-repo').value = s.repo || '';
+  document.getElementById('set-pat').value = s.pat || '';
+  document.getElementById('set-branch').value = s.branch || 'main';
+  document.getElementById('set-device').value = s.deviceId || '';
+  document.getElementById('set-enc').value = s.encKey || '';
+  document.getElementById('set-status').textContent = '✓ Signed in. Settings restored (data is fresh — pull to sync).';
+  document.getElementById('set-status').className = 'status ok';
+  showCleanupHint();
+};
 
     
     // Load existing settings
