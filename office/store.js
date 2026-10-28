@@ -210,76 +210,73 @@ const Store = {
   },
 
   // --- MANUAL PULL ---
-  async syncPull() {
-    const settings = getSettings();
-    if (!settings.pat || !settings.repo || !settings.owner) throw new Error('No GitHub settings');
+ async syncPull() {
+  const settings = getSettings();
+  if (!settings.pat || !settings.repo || !settings.owner) throw new Error('No GitHub settings');
 
-    const lastSyncedAt = this.readMeta('lastSyncedAt') || new Date(0).toISOString();
-    const commitsUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/commits?path=sync&since=${encodeURIComponent(lastSyncedAt)}&per_page=50`;
+  // List all commits touching sync/ (no since param — dedup handles it)
+  const commitsUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/commits?path=sync&per_page=100`;
 
-    const res = await fetch(commitsUrl, {
-      headers: {
-        'Authorization': `Bearer ${settings.pat}`,
-        'Accept': 'application/vnd.github+json'
-      }
-    });
-    if (!res.ok) throw new Error(`Commits API: HTTP ${res.status}`);
-    const commits = await res.json();
-
-    const myPrefix = String(DEVICE_ID);
-    const existingIds = new Set(this.readChanges().map(c => c.changeId));
-    const d = _loadLocal();
-    d.changes = d.changes || [];
-    let pulledCount = 0;
-
-    for (const commit of commits) {
-      for (const file of (commit.files || [])) {
-        const fname = file.filename.replace('sync/', '').replace('.csv', '');
-        if (fname.startsWith(myPrefix)) continue;
-        if (existingIds.has(fname)) continue;
-
-        const fileUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/sync/${fname}?ref=${commit.sha}`;
-        const fRes = await fetch(fileUrl, {
-          headers: {
-            'Authorization': `Bearer ${settings.pat}`,
-            'Accept': 'application/vnd.github+json'
-          }
-        });
-        if (!fRes.ok) continue;
-        const fData = await fRes.json();
-        const content = atob(fData.content);
-
-        const lines = content.split('\n').filter(l => l.trim());
-        if (lines.length < 2) continue;
-        const dataLine = lines[1];
-        const c1 = dataLine.indexOf(',');
-        const c2 = dataLine.indexOf(',', c1 + 1);
-        const tableName = dataLine.slice(0, c1);
-        const opType = dataLine.slice(c1 + 1, c2);
-        let payload = dataLine.slice(c2 + 1);
-        if (payload.startsWith('"') && payload.endsWith('"')) {
-          payload = payload.slice(1, -1).replace(/""/g, '"');
-        }
-
-        d.changes.push({
-          changeId: fname, tableName, opType,
-          payloadJSON: payload,
-          synced: 1, pulled: 1, applied: 0,
-          ts: new Date().toISOString()
-        });
-        existingIds.add(fname);
-        pulledCount++;
-      }
+  const res = await fetch(commitsUrl, {
+    headers: {
+      'Authorization': `Bearer ${settings.pat}`,
+      'Accept': 'application/vnd.github+json'
     }
+  });
+  if (!res.ok) throw new Error(`Commits API: HTTP ${res.status}`);
+  const commits = await res.json();
 
-    d.meta = d.meta || {};
-    d.meta.lastSyncedAt = new Date().toISOString();
-    _saveLocal(d);
+  const myPrefix = String(DEVICE_ID);
+  const existingIds = new Set(this.readChanges().map(c => c.changeId));
+  const d = _loadLocal();
+  d.changes = d.changes || [];
+  let pulledCount = 0;
 
-    if (pulledCount > 0) this.mergeProcess();
-    return pulledCount;
-  },
+  for (const commit of commits) {
+    for (const file of (commit.files || [])) {
+      const fname = file.filename.replace('sync/', '').replace('.csv', '');
+      if (fname.startsWith(myPrefix)) continue;
+      if (existingIds.has(fname)) continue;
 
+      const fileUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/sync/${fname}?ref=${commit.sha}`;
+      const fRes = await fetch(fileUrl, {
+        headers: {
+          'Authorization': `Bearer ${settings.pat}`,
+          'Accept': 'application/vnd.github+json'
+        }
+      });
+      if (!fRes.ok) continue;
+      const fData = await fRes.json();
+      const content = atob(fData.content);
+
+      const lines = content.split('\n').filter(l => l.trim());
+      if (lines.length < 2) continue;
+      const dataLine = lines[1];
+      const c1 = dataLine.indexOf(',');
+      const c2 = dataLine.indexOf(',', c1 + 1);
+      const tableName = dataLine.slice(0, c1);
+      const opType = dataLine.slice(c1 + 1, c2);
+      let payload = dataLine.slice(c2 + 1);
+      if (payload.startsWith('"') && payload.endsWith('"')) {
+        payload = payload.slice(1, -1).replace(/""/g, '"');
+      }
+
+      d.changes.push({
+        changeId: fname, tableName, opType,
+        payloadJSON: payload,
+        synced: 1, pulled: 1, applied: 0,
+        ts: new Date().toISOString()
+      });
+      existingIds.add(fname);
+      pulledCount++;
+    }
+  }
+
+  _saveLocal(d);
+
+  if (pulledCount > 0) this.mergeProcess();
+  return pulledCount;
+},   
   // --- MERGE MANAGER (uses SILENT writes — no re-push) ---
   mergeProcess() {
     const pending = this.readChanges({ pulled: 1, applied: 0 });
