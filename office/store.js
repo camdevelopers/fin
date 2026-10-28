@@ -215,7 +215,8 @@ const Store = {
   if (!settings.pat || !settings.repo || !settings.owner) throw new Error('No GitHub settings');
 
   // List all commits touching sync/ (no since param — dedup handles it)
-  const commitsUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/commits?path=sync&per_page=100`;
+  //const commitsUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/commits?path=sync&per_page=100`;
+   const commitsUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/commits?sha=${settings.branch || 'main'}&path=sync&per_page=100`;   
 
   const res = await fetch(commitsUrl, {
     headers: {
