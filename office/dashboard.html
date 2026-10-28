@@ -138,39 +138,47 @@
         attC.innerHTML = html;
       } else attC.innerHTML = '<h3>🕐 Attendance</h3><p class="muted">No attendance task configured.</p>';
 
-      // --- Categorize instances for this day ---
-      const missed = [], leave = [], current = [], upcoming = [], completed = [], ignored = [];
+// --- Categorize instances for this day ---
+const missed = [], leave = [], current = [], upcoming = [], completed = [], ignored = [];
+const ds = dayStr();
 
-      for (const task of tasks) {
-        if (task.type === 'attendance') continue;
+for (const task of tasks) {
+  if (task.type === 'attendance') continue;
 
-        if (task.type === 'quantity') {
-          const stock = Store.readStock(task.id);
-          const isLow = stock.qty <= task.config.threshold;
-          const pInst = instances.find(i => i.taskId === task.id && (i.status === 'pending' || i.status === 'leave'));
-          const lastDone = instances.filter(i => i.taskId === task.id && i.status === 'done').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
-          current.push({ task, instance: pInst || null, stock, isLow, inactive: !isLow && !pInst });
-          if (lastDone && withinWindow(lastDone, task, refTime)) completed.push({ task, instance: lastDone });
-          continue;
-        }
+  if (task.type === 'quantity') {
+    const stock = Store.readStock(task.id);
+    const isLow = stock.qty <= task.config.threshold;
+    // Only show if the pending instance's dueAt is on this day
+    const pInst = instances.find(i => i.taskId === task.id && (i.status === 'pending' || i.status === 'leave') && i.dueAt.slice(0, 10) === ds);
+    const lastDone = instances.filter(i => i.taskId === task.id && i.status === 'done' && i.updatedAt.slice(0, 10) === ds).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+    if (pInst || isLow) current.push({ task, instance: pInst || null, stock, isLow, inactive: !isLow && !pInst });
+    if (lastDone) completed.push({ task, instance: lastDone });
+    continue;
+  }
 
-        const tInsts = instances.filter(i => i.taskId === task.id);
-        tInsts.filter(i => i.status === 'ignore').forEach(inst => ignored.push({ task, instance: inst }));
+  const tInsts = instances.filter(i => i.taskId === task.id);
 
-        const pInst = tInsts.find(i => ['pending', 'doing', 'will_do'].includes(i.status));
-        const lInst = tInsts.find(i => i.status === 'leave');
-        const lastDone = tInsts.filter(i => i.status === 'done').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+  // Ignored: show if ignored ON this day
+  tInsts.filter(i => i.status === 'ignore' && i.updatedAt.slice(0, 10) === ds)
+    .forEach(inst => ignored.push({ task, instance: inst }));
 
-        if (lInst) leave.push({ task, instance: lInst });
+  // Active sections: only instances due ON this day
+  const pInst = tInsts.find(i => ['pending', 'doing', 'will_do'].includes(i.status) && i.dueAt.slice(0, 10) === ds);
+  const lInst = tInsts.find(i => i.status === 'leave' && i.dueAt.slice(0, 10) === ds);
 
-        if (pInst) {
-          const hrs = (new Date(pInst.dueAt) - refTime) / 3600000;
-          if (hrs < 0) missed.push({ task, instance: pInst });
-          else if (hrs <= task.currentHrs) current.push({ task, instance: pInst });
-          else if (hrs <= task.upcomingHrs) upcoming.push({ task, instance: pInst });
-        }
-        if (lastDone && withinWindow(lastDone, task, refTime)) completed.push({ task, instance: lastDone });
-      }
+  // Completed: show if done ON this day
+  const lastDone = tInsts.filter(i => i.status === 'done' && i.updatedAt.slice(0, 10) === ds).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+
+  if (lInst) leave.push({ task, instance: lInst });
+
+  if (pInst) {
+    const hrs = (new Date(pInst.dueAt) - refTime) / 3600000;
+    if (hrs < 0) missed.push({ task, instance: pInst });
+    else if (hrs <= task.currentHrs) current.push({ task, instance: pInst });
+    else if (hrs <= task.upcomingHrs) upcoming.push({ task, instance: pInst });
+  }
+  if (lastDone) completed.push({ task, instance: lastDone });
+}   
 
       document.getElementById('sec-missed').innerHTML = section('⚠️ Missed', missed, card);
       document.getElementById('sec-leave').innerHTML = section('🏖 Leave', leave, card);
