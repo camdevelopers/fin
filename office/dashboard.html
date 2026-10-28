@@ -91,7 +91,12 @@
     let selectedDate = new Date();
     selectedDate.setHours(0, 0, 0, 0);
 
-    function dayStr() { return selectedDate.toISOString().slice(0, 10); }
+    //function dayStr() { return selectedDate.toISOString().slice(0, 10); }
+    function localDateStr(dateOrIso) {
+  const d = typeof dateOrIso === 'string' ? new Date(dateOrIso) : dateOrIso;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}   
+    function dayStr() { return localDateStr(selectedDate); }   
     function dayEnd() { const d = new Date(selectedDate); d.setHours(23, 59, 59, 999); return d; }
     function dayStart() { const d = new Date(selectedDate); d.setHours(0, 0, 0, 0); return d; }
 
