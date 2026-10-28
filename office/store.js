@@ -238,11 +238,15 @@ async syncPull() {
     if (existingIds.has(fname)) continue;
 
     // Fetch file content
-    const fRes = await fetch(file.download_url, {
-      headers: { 'Authorization': `Bearer ${settings.pat}` }
-    });
-    if (!fRes.ok) continue;
-    const content = await fRes.text();
+const fRes = await fetch(file.url, {
+  headers: {
+    'Authorization': `Bearer ${settings.pat}`,
+    'Accept': 'application/vnd.github+json'
+  }
+});
+if (!fRes.ok) continue;
+const fData = await fRes.json();
+const content = atob(fData.content);
 
     // Parse CSV
     const lines = content.split('\n').filter(l => l.trim());
