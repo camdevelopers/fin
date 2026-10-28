@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
+    h2 { margin-bottom: 0.5rem; }
+    h3 { margin: 1.2rem 0 0.5rem; font-size: 0.95rem; }
+    .card { border:1px solid #e5e7eb; border-radius:8px; padding:0.75rem; margin:0.5rem 0; }
+    .card.inactive { opacity:0.55; }
+    .card.done { border-left:3px solid #059669; opacity:0.7; }
+    .card.leave { border-left:3px solid #f59e0b; }
+    .card.ignored { border-left:3px solid #6b7280; opacity:0.6; }
+    .card.missed { border-left:3px solid #dc2626; }
+    .card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem; }
+    .card-header strong { font-size:0.95rem; }
+    .card-meta { font-size:0.8rem; color:#6b7280; }
+    .badge { font-size:0.7rem; padding:0.15rem 0.4rem; border-radius:3px; }
+    .badge-pending { background:#fef3c7; color:#92400e; }
+    .badge-done { background:#d1fae5; color:#065f46; }
+    .badge-low { background:#fee2e2; color:#991b1b; }
+    .badge-ok { background:#d1fae5; color:#065f46; }
+    .badge-standalone { background:#e5e7eb; color:#374151; }
+    .badge-dep { background:#ede9fe; color:#5b21b6; }
+    .badge-leave { background:#fef3c7; color:#92400e; }
+    .badge-ignore { background:#e5e7eb; color:#6b7280; }
+    .badge-missed { background:#fee2e2; color:#991b1b; }
+    .stock-bar-bg { height:6px; background:#e5e7eb; border-radius:3px; margin-top:0.4rem; overflow:hidden; }
+    .stock-bar-fill { height:100%; background:#059669; border-radius:3px; }
+    .stock-bar-fill.low { background:#dc2626; }
+    .stock-label { font-size:0.8rem; color:#6b7280; margin-top:0.3rem; }
+    .att-entry { font-size:0.85rem; padding:0.25rem 0; border-bottom:1px solid #f3f4f6; }
+    .att-summary { font-size:0.9rem; font-weight:600; margin-top:0.5rem; padding:0.4rem; background:#f0fdf4; border-radius:4px; }
+    .events-log { margin-top:1.5rem; }
+    .event-row { font-size:0.8rem; padding:0.25rem 0; border-bottom:1px solid #f3f4f6; color:#374151; }
+    .event-row .ts { color:#6b7280; }
+    a { display:inline-block; margin-top:1rem; color:#2563eb; text-decoration:none; }
+    .muted { color:#6b7280; }
+    .note-item { display:flex; align-items:flex-start; gap:0.5rem; padding:0.5rem 0.6rem; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:0.4rem; }
+    .note-item.done { opacity:0.6; }
+    .note-item.done .note-text { text-decoration:line-through; }
+    .note-text { flex:1; font-size:0.9rem; }
+    .section { border:2px solid #111; border-radius:10px; padding:0.75rem 1rem; margin:0.75rem 0; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,0.06); }
+    .section h3 { margin-top:0; }
+    #sec-ignored { border-left:4px solid #6b7280; }
+    #sec-leave { border-left:4px solid #f59e0b; }
+    details#sec-ignored summary { cursor:pointer; font-weight:600; font-size:0.95rem; }
+    .date-nav { display:flex; justify-content:center; align-items:center; gap:1rem; margin:1rem 0; }
+    .date-nav button { padding:0.4rem 0.9rem; border:1px solid #d1d5db; border-radius:4px; cursor:pointer; font-size:1rem; background:#fff; }
+    .date-nav button:hover { background:#f3f4f6; }
+    .date-nav .date-label { font-weight:600; font-size:0.95rem; min-width:160px; text-align:center; }
+    .date-nav .today-btn { padding:0.3rem 0.6rem; font-size:0.75rem; border:1px solid #d1d5db; border-radius:3px; cursor:pointer; background:#f9fafb; }
+    .readonly-badge { font-size:0.7rem; background:#e5e7eb; color:#6b7280; padding:0.15rem 0.4rem; border-radius:3px; margin-left:0.5rem; vertical-align:middle; }
+  </style>
+</head>
+<body>
+  <h2>Dashboard <span class="readonly-badge">READ ONLY</span></h2>
+
+  <div class="date-nav">
+    <button onclick="prevDay()">‹</button>
+    <span class="date-label" id="date-label"></span>
+    <button onclick="nextDay()">›</button>
+    <button class="today-btn" onclick="goToday()">Today</button>
+  </div>
+
+  <div class="section" id="sec-attendance"></div>
+  <div class="section" id="sec-missed"></div>
+  <div class="section" id="sec-leave"></div>
+  <div class="section" id="sec-current"></div>
+  <div class="section" id="sec-upcoming"></div>
+  <div class="section" id="sec-completed"></div>
+  <div class="section" id="sec-notes"></div>
+  <details class="section" id="sec-ignored"><summary>🚫 Ignored</summary><div id="sec-ignored-content"></div></details>
+
+  <div class="events-log" id="events-log"></div>
+
+  <div style="margin-top:1.5rem">
+    <a href="offwork.html">→ Work Log</a>
+    <a href="offtasks.html">→ Tasks</a>
+  </div>
+
+  <script>
+    // *** HARDCODE THIS: 1 or 2 ***
+    window.DEVICE_ID = 1;
+  </script>
+  <script src="store.js"></script>
+  <script>
+    let selectedDate = new Date();
+    selectedDate.setHours(0, 0, 0, 0);
+
+    function dayStr() { return selectedDate.toISOString().slice(0, 10); }
+    function dayEnd() { const d = new Date(selectedDate); d.setHours(23, 59, 59, 999); return d; }
+    function dayStart() { const d = new Date(selectedDate); d.setHours(0, 0, 0, 0); return d; }
+
+    window.prevDay = function() { selectedDate.setDate(selectedDate.getDate() - 1); render(); };
+    window.nextDay = function() { selectedDate.setDate(selectedDate.getDate() + 1); render(); };
+    window.goToday = function() { selectedDate = new Date(); selectedDate.setHours(0,0,0,0); render(); };
+
+    function render() {
+      const tasks = Store.readTasks();
+      const instances = Store.readInstances();
+      const events = Store.readEvents();
+      const notes = Store.readNotes();
+      const ds = dayStr();
+      const refTime = dayEnd(); // reference "now" for this day view
+
+      document.getElementById('date-label').textContent = selectedDate.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+
+      // --- Attendance ---
+      const attTasks = tasks.filter(t => t.type === 'attendance');
+      const attC = document.getElementById('sec-attendance');
+      if (attTasks.length) {
+        const attEvents = events.filter(e => e.taskId === 'attendance' && e.ts.slice(0, 10) === ds);
+        let html = '<h3>🕐 Attendance</h3>';
+        let totalMs = 0;
+        for (let i = 0; i < attEvents.length; i++) {
+          if (attEvents[i].action === 'checkin') {
+            const nx = attEvents[i + 1];
+            if (nx && nx.action === 'checkout') totalMs += new Date(nx.ts) - new Date(attEvents[i].ts);
+          }
+        }
+        html += `<div class="att-summary">Total present: <strong>${totalMs > 0 ? fmtDuration(totalMs) : '0m'}</strong></div>`;
+        if (attEvents.length) {
+          let i = 0;
+          while (i < attEvents.length) {
+            const ev = attEvents[i];
+            if (ev.action === 'checkin') {
+              const nx = attEvents[i + 1];
+              const co = nx && nx.action === 'checkout' ? nx : null;
+              html += `<div class="card"><div class="att-entry"><strong>#${Math.ceil((i + 1) / 2)}</strong> In: <strong>${fmtTime(ev.ts)}</strong> | Out: <strong>${co ? fmtTime(co.ts) : '—'}</strong></div></div>`;
+              i += co ? 2 : 1;
+            } else i++;
+          }
+        } else html += '<p class="muted">No entries.</p>';
+        attC.innerHTML = html;
+      } else attC.innerHTML = '<h3>🕐 Attendance</h3><p class="muted">No attendance task configured.</p>';
+
+      // --- Categorize instances for this day ---
+      const missed = [], leave = [], current = [], upcoming = [], completed = [], ignored = [];
+
+      for (const task of tasks) {
+        if (task.type === 'attendance') continue;
+
+        if (task.type === 'quantity') {
+          const stock = Store.readStock(task.id);
+          const isLow = stock.qty <= task.config.threshold;
+          const pInst = instances.find(i => i.taskId === task.id && (i.status === 'pending' || i.status === 'leave'));
+          const lastDone = instances.filter(i => i.taskId === task.id && i.status === 'done').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+          current.push({ task, instance: pInst || null, stock, isLow, inactive: !isLow && !pInst });
+          if (lastDone && withinWindow(lastDone, task, refTime)) completed.push({ task, instance: lastDone });
+          continue;
+        }
+
+        const tInsts = instances.filter(i => i.taskId === task.id);
+        tInsts.filter(i => i.status === 'ignore').forEach(inst => ignored.push({ task, instance: inst }));
+
+        const pInst = tInsts.find(i => ['pending', 'doing', 'will_do'].includes(i.status));
+        const lInst = tInsts.find(i => i.status === 'leave');
+        const lastDone = tInsts.filter(i => i.status === 'done').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+
+        if (lInst) leave.push({ task, instance: lInst });
+
+        if (pInst) {
+          const hrs = (new Date(pInst.dueAt) - refTime) / 3600000;
+          if (hrs < 0) missed.push({ task, instance: pInst });
+          else if (hrs <= task.currentHrs) current.push({ task, instance: pInst });
+          else if (hrs <= task.upcomingHrs) upcoming.push({ task, instance: pInst });
+        }
+        if (lastDone && withinWindow(lastDone, task, refTime)) completed.push({ task, instance: lastDone });
+      }
+
+      document.getElementById('sec-missed').innerHTML = section('⚠️ Missed', missed, card);
+      document.getElementById('sec-leave').innerHTML = section('🏖 Leave', leave, card);
+      document.getElementById('sec-current').innerHTML = section('📋 Current', current, card);
+      document.getElementById('sec-upcoming').innerHTML = section('📅 Upcoming', upcoming, card);
+      document.getElementById('sec-completed').innerHTML = section('✅ Completed', completed, doneCard);
+      document.getElementById('sec-ignored-content').innerHTML = section('', ignored, ignoredCard);
+
+      // --- Notes (read-only) ---
+      const notesC = document.getElementById('sec-notes');
+      let nHtml = '<h3>📝 Notes</h3>';
+      if (!notes.length) nHtml += '<p class="muted">No notes.</p>';
+      else nHtml += notes.map(n => `<div class="note-item${n.done ? ' done' : ''}"><span class="note-text">${n.text}</span></div>`).join('');
+      notesC.innerHTML = nHtml;
+
+      // --- Event log for this day ---
+      const dayEvents = events.filter(e => e.ts.slice(0, 10) === ds);
+      const lc = document.getElementById('events-log');
+      if (dayEvents.length) {
+        lc.innerHTML = '<h3>📜 Activity Log</h3>' + dayEvents.slice(-30).reverse().map(e =>
+          `<div class="event-row"><span class="ts">${new Date(e.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> <strong>${e.action}</strong> ${e.taskId}${e.note ? ' — ' + e.note : ''}</div>`
+        ).join('');
+      } else lc.innerHTML = '';
+    }
+
+    function withinWindow(inst, task, refTime) {
+      const cutoff = new Date(refTime);
+      cutoff.setDate(cutoff.getDate() - task.completedDays);
+      return new Date(inst.updatedAt) >= cutoff;
+    }
+
+    function section(title, items, fn) {
+      if (!items.length) return title ? `<h3>${title}</h3><p class="muted">Nothing here.</p>` : '<p class="muted">Nothing here.</p>';
+      return (title ? `<h3>${title}</h3>` : '') + items.map(fn).join('');
+    }
+
+    function card({ task, instance, stock, isLow, inactive }) {
+      let h = `<div class="card${inactive ? ' inactive' : ''}${instance && instance.status === 'leave' ? ' leave' : ''}${instance && instance.status === 'pending' && new Date(instance.dueAt) < dayEnd() ? ' missed' : ''}">`;
+      h += `<div class="card-header"><strong>${task.name}</strong>`;
+      if (task.type === 'dependency') h += '<span class="badge badge-dep">⚡ dep</span>';
+      else if (task.type === 'standalone') h += '<span class="badge badge-standalone">one-time</span>';
+      else {
+        const bc = instance ? (instance.status === 'leave' ? 'badge-leave' : 'badge-pending') : (isLow ? 'badge-low' : 'badge-ok');
+        const bt = instance ? (instance.status === 'leave' ? 'leave' : instance.status) : (isLow ? 'LOW' : 'ok');
+        h += `<span class="badge ${bc}">${bt}</span>`;
+      }
+      h += '</div>';
+      if (instance) {
+        const due = new Date(instance.dueAt);
+        const hrs = Math.round((due - dayEnd()) / 3600000);
+        h += `<div class="card-meta">Due: ${fmtDate(due)} ${fmtTime(due)}</div>`;
+      }
+      if (task.type === 'quantity' && stock) {
+        const th = task.config.threshold;
+        const max = Math.max(stock.qty, th * 3, 10);
+        const pct = Math.min((stock.qty / max) * 100, 100);
+        h += `<div class="stock-label">Stock: <strong>${stock.qty}</strong> / threshold ${th}</div>`;
+        h += `<div class="stock-bar-bg"><div class="stock-bar-fill${isLow ? ' low' : ''}" style="width:${pct}%"></div></div>`;
+      }
+      h += '</div>';
+      return h;
+    }
+
+    function doneCard({ task, instance }) {
+      return `<div class="card done"><div class="card-header"><strong>${task.name}</strong><span class="badge badge-done">done</span></div><div class="card-meta">Done: ${fmtDate(instance.updatedAt)} ${fmtTime(instance.updatedAt)}</div></div>`;
+    }
+
+    function ignoredCard({ task, instance }) {
+      return `<div class="card ignored"><div class="card-header"><strong>${task.name}</strong><span class="badge badge-ignore">ignored</span></div><div class="card-meta">Ignored: ${fmtDate(instance.updatedAt)} ${fmtTime(instance.updatedAt)}</div></div>`;
+    }
+
+    render();
+  </script>
+</body>
+</html>   
