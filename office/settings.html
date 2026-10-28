@@ -67,6 +67,13 @@
   <div class="btn-row">
     <button onclick="saveAndTest()">Save & Test</button>
   </div>
+
+  <div class="btn-row">
+  <button onclick="signIn()" style="background:#2563eb">🔓 Sign In</button>
+  <button onclick="signOut()" style="background:#374151">🔒 Sign Out</button>
+</div>
+
+  
   <div id="set-status" class="status"></div>
 
   <h3>Snapshot</h3>
@@ -83,6 +90,57 @@
   <a href="offwork.html">→ Back to Work Log</a>
   <script src="store.js"></script>
   <script>
+
+    // --- TEMP HACK: Sign In / Out ---
+const BACKUP_KEY = 'office-settings-backup';
+
+window.signOut = function() {
+  // Save current values as backup
+  const s = {
+    owner: document.getElementById('set-owner').value.trim(),
+    repo: document.getElementById('set-repo').value.trim(),
+    pat: document.getElementById('set-pat').value.trim(),
+    branch: document.getElementById('set-branch').value.trim() || 'main',
+    deviceId: document.getElementById('set-device').value || undefined,
+    encKey: document.getElementById('set-enc').value.trim(),
+  };
+  localStorage.setItem(BACKUP_KEY, JSON.stringify(s));
+  // Clear active settings
+  localStorage.removeItem('office-settings');
+  // Clear inputs
+  document.getElementById('set-owner').value = '';
+  document.getElementById('set-repo').value = '';
+  document.getElementById('set-pat').value = '';
+  document.getElementById('set-branch').value = 'main';
+  document.getElementById('set-device').value = '';
+  document.getElementById('set-enc').value = '';
+  document.getElementById('set-status').textContent = '🔒 Signed out. Use "Sign In" to restore.';
+  document.getElementById('set-status').className = 'status err';
+};
+
+window.signIn = function() {
+  const s = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
+  if (!s) {
+    document.getElementById('set-status').textContent = '⚠️ No backup found. Sign out first.';
+    document.getElementById('set-status').className = 'status err';
+    return;
+  }
+  // Restore to active settings
+  localStorage.setItem('office-settings', JSON.stringify(s));
+  // Restore to inputs
+  document.getElementById('set-owner').value = s.owner || '';
+  document.getElementById('set-repo').value = s.repo || '';
+  document.getElementById('set-pat').value = s.pat || '';
+  document.getElementById('set-branch').value = s.branch || 'main';
+  document.getElementById('set-device').value = s.deviceId || '';
+  document.getElementById('set-enc').value = s.encKey || '';
+  document.getElementById('set-status').textContent = '✓ Signed in. Settings restored.';
+  document.getElementById('set-status').className = 'status ok';
+  showCleanupHint();
+};   
+
+
+    
     // Load existing settings
     (function() {
       const s = JSON.parse(localStorage.getItem('office-settings') || '{}');
