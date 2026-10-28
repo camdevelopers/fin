@@ -210,13 +210,18 @@
       renderList();
     });
 
-    window.doPull = function() {
-      const count = Store.syncPull();
-      const el = document.getElementById('pull-status');
-      el.textContent = `✓ Pulled ${count} change(s)`;
-      setTimeout(() => el.textContent = '', 3000);
-      renderList();
-    };
+window.doPull = async function() {
+  const el = document.getElementById('pull-status');
+  el.textContent = '⬇ Pulling…';
+  try {
+    const count = await Store.syncPull();
+    el.textContent = `✓ Pulled ${count} change(s)`;
+  } catch (err) {
+    el.textContent = `✗ ${err.message}`;
+  }
+  setTimeout(() => el.textContent = '', 4000);
+  render();
+};   
 
     renderList();
   </script>
