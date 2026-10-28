@@ -58,14 +58,14 @@ async function encryptText(plaintext) {
 
 async function decryptText(b64) {
   const key = await getCryptoKey();
-  const raw = atob(b64);
+  const raw = atob(b64.replace(/\s/g, ''));  // ← strip whitespace/newlines
   const bytes = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
   const iv = bytes.slice(0, 12);
   const ciphertext = bytes.slice(12);
   const decoded = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
   return new TextDecoder().decode(decoded);
-}
+}   
 
 // ============================================================
 // STORE
