@@ -284,7 +284,8 @@ const Store = {
     const settings = getSettings();
     if (!settings.pat || !settings.repo || !settings.owner) throw new Error('No GitHub settings');
 
-    const listUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/sync?ref=${settings.branch || 'main'}`;
+    //const listUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/sync?ref=${settings.branch || 'main'}`;
+    const listUrl = `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/sync?ref=${settings.branch || 'main'}&t=${Date.now()}`;   
     const res = await fetch(listUrl, {
       headers: {
         'Authorization': `Bearer ${settings.pat}`,
