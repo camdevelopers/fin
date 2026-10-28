@@ -1,14 +1,12 @@
 // ============================================================
-// store.js — Data Access Layer + Sync + Merge
+// store.js — Data Access Layer + Sync + Merge (FIXED)
 // ============================================================
 
-// --- Settings ---
 function getSettings() {
   try { return JSON.parse(localStorage.getItem('office-settings') || '{}'); }
   catch { return {}; }
 }
 
-// --- Device ID resolution ---
 function getDeviceId() {
   const s = getSettings();
   if (s.deviceId) return parseInt(s.deviceId, 10);
@@ -17,7 +15,6 @@ function getDeviceId() {
 const DEVICE_ID = getDeviceId();
 const BASELINE = '2000-01-01';
 
-// --- Local data (per-instance) ---
 function _localKey() { return `app_data_${DEVICE_ID}`; }
 function _loadLocal() {
   try { return JSON.parse(localStorage.getItem(_localKey()) || '{}'); }
@@ -25,9 +22,6 @@ function _loadLocal() {
 }
 function _saveLocal(data) { localStorage.setItem(_localKey(), JSON.stringify(data)); }
 
-// ============================================================
-// STORE
-// ============================================================
 const Store = {
   // --- READS ---
   readTasks() { return _loadLocal().tasks || []; },
@@ -51,43 +45,25 @@ const Store = {
     });
   },
 
-  // --- WRITES ---
+  // --- PUBLIC WRITES (log change + push) ---
   writeTask(task) {
-    const d = _loadLocal();
-    d.tasks = d.tasks || [];
-    const idx = d.tasks.findIndex(t => t.id === task.id);
-    if (idx >= 0) d.tasks[idx] = task; else d.tasks.push(task);
-    _saveLocal(d);
+    this._writeTaskLocal(task);
     this._logChange('tasks', 'upsert', task);
   },
   writeInstance(inst) {
-    const d = _loadLocal();
-    d.instances = d.instances || [];
-    const idx = d.instances.findIndex(i => i.id === inst.id);
-    if (idx >= 0) d.instances[idx] = inst; else d.instances.push(inst);
-    _saveLocal(d);
+    this._writeInstanceLocal(inst);
     this._logChange('instances', 'upsert', inst);
   },
   writeEvent(ev) {
-    const d = _loadLocal();
-    d.events = d.events || [];
-    d.events.push(ev);
-    _saveLocal(d);
+    this._writeEventLocal(ev);
     this._logChange('events', 'insert', ev);
   },
   writeNote(note) {
-    const d = _loadLocal();
-    d.notes = d.notes || [];
-    const idx = d.notes.findIndex(n => n.id === note.id);
-    if (idx >= 0) d.notes[idx] = note; else d.notes.push(note);
-    _saveLocal(d);
+    this._writeNoteLocal(note);
     this._logChange('notes', 'upsert', note);
   },
   writeStock(taskId, stock) {
-    const d = _loadLocal();
-    d.stock = d.stock || {};
-    d.stock[taskId] = stock;
-    _saveLocal(d);
+    this._writeStockLocal(taskId, stock);
     this._logChange('stock', 'upsert', { taskId, ...stock });
   },
   writeMeta(key, value) {
@@ -97,33 +73,77 @@ const Store = {
     _saveLocal(d);
   },
 
-  // --- DELETES ---
+  // --- PUBLIC DELETES (log change + push) ---
   deleteTask(id) {
-    const d = _loadLocal();
-    d.tasks = (d.tasks || []).filter(t => t.id !== id);
-    _saveLocal(d);
+    this._deleteTaskLocal(id);
     this._logChange('tasks', 'delete', { id });
   },
   deleteInstance(id) {
-    const d = _loadLocal();
-    d.instances = (d.instances || []).filter(i => i.id !== id);
-    _saveLocal(d);
+    this._deleteInstanceLocal(id);
     this._logChange('instances', 'delete', { id });
   },
   deleteNote(id) {
+    this._deleteNoteLocal(id);
+    this._logChange('notes', 'delete', { id });
+  },
+
+  // --- SILENT WRITES (local only, NO change log, NO push) ---
+  // Used exclusively by Merge Manager.
+  _writeTaskLocal(task) {
+    const d = _loadLocal();
+    d.tasks = d.tasks || [];
+    const idx = d.tasks.findIndex(t => t.id === task.id);
+    if (idx >= 0) d.tasks[idx] = task; else d.tasks.push(task);
+    _saveLocal(d);
+  },
+  _writeInstanceLocal(inst) {
+    const d = _loadLocal();
+    d.instances = d.instances || [];
+    const idx = d.instances.findIndex(i => i.id === inst.id);
+    if (idx >= 0) d.instances[idx] = inst; else d.instances.push(inst);
+    _saveLocal(d);
+  },
+  _writeEventLocal(ev) {
+    const d = _loadLocal();
+    d.events = d.events || [];
+    d.events.push(ev);
+    _saveLocal(d);
+  },
+  _writeNoteLocal(note) {
+    const d = _loadLocal();
+    d.notes = d.notes || [];
+    const idx = d.notes.findIndex(n => n.id === note.id);
+    if (idx >= 0) d.notes[idx] = note; else d.notes.push(note);
+    _saveLocal(d);
+  },
+  _writeStockLocal(taskId, stock) {
+    const d = _loadLocal();
+    d.stock = d.stock || {};
+    d.stock[taskId] = stock;
+    _saveLocal(d);
+  },
+  _deleteTaskLocal(id) {
+    const d = _loadLocal();
+    d.tasks = (d.tasks || []).filter(t => t.id !== id);
+    _saveLocal(d);
+  },
+  _deleteInstanceLocal(id) {
+    const d = _loadLocal();
+    d.instances = (d.instances || []).filter(i => i.id !== id);
+    _saveLocal(d);
+  },
+  _deleteNoteLocal(id) {
     const d = _loadLocal();
     d.notes = (d.notes || []).filter(n => n.id !== id);
     _saveLocal(d);
-    this._logChange('notes', 'delete', { id });
   },
 
   // --- CHANGE LOGGING ---
   _logChange(tableName, opType, payload) {
     const d = _loadLocal();
     d.meta = d.meta || {};
-    const seqKey = 'nextSeq';
-    const next = (d.meta[seqKey] || 0) + 1;
-    d.meta[seqKey] = next;
+    const next = (d.meta.nextSeq || 0) + 1;
+    d.meta.nextSeq = next;
     const changeId = `${DEVICE_ID}${String(next).padStart(4, '0')}`;
     d.changes = d.changes || [];
     d.changes.push({
@@ -133,39 +153,17 @@ const Store = {
       ts: new Date().toISOString()
     });
     _saveLocal(d);
-    this._queuePush(changeId);
+    // Immediate push (no debounce)
+    this._pushOne(changeId).catch(err => {
+      console.error(`[Sync] Push failed ${changeId}:`, err.message);
+    });
   },
 
-  // --- PUSH QUEUE (debounced) ---
-  _pushQueue: [],
-  _pushTimer: null,
-
-  _queuePush(changeId) {
-    this._pushQueue.push(changeId);
-    if (this._pushTimer) clearTimeout(this._pushTimer);
-    this._pushTimer = setTimeout(() => this._flushPush(), 2500);
-  },
-
-  async _flushPush() {
-    if (!this._pushQueue.length) return;
+  // --- PUSH (immediate) ---
+  async _pushOne(changeId) {
     const settings = getSettings();
     if (!settings.pat || !settings.repo || !settings.owner) return;
 
-    const batch = this._pushQueue.splice(0);
-    for (const changeId of batch) {
-      try {
-        await this._pushOne(changeId, settings);
-      } catch (err) {
-        console.error(`[Sync] Push failed ${changeId}:`, err.message);
-        this._pushQueue.push(changeId);
-      }
-    }
-    if (this._pushQueue.length) {
-      this._pushTimer = setTimeout(() => this._flushPush(), 5000);
-    }
-  },
-
-  async _pushOne(changeId, settings) {
     const d = _loadLocal();
     const change = (d.changes || []).find(c => c.changeId === changeId);
     if (!change) return;
@@ -205,11 +203,9 @@ const Store = {
     if (!settings.pat || !settings.repo || !settings.owner) return;
     const unsynced = this.readChanges({ synced: 0, applied: 1 });
     for (const c of unsynced) {
-      if (!this._pushQueue.includes(c.changeId)) this._pushQueue.push(c.changeId);
-    }
-    if (this._pushQueue.length) {
-      if (this._pushTimer) clearTimeout(this._pushTimer);
-      this._pushTimer = setTimeout(() => this._flushPush(), 1000);
+      this._pushOne(c.changeId).catch(err => {
+        console.error(`[Sync] Retry failed ${c.changeId}:`, err.message);
+      });
     }
   },
 
@@ -284,7 +280,7 @@ const Store = {
     return pulledCount;
   },
 
-  // --- MERGE MANAGER ---
+  // --- MERGE MANAGER (uses SILENT writes — no re-push) ---
   mergeProcess() {
     const pending = this.readChanges({ pulled: 1, applied: 0 });
     pending.sort((a, b) => new Date(a.ts) - new Date(b.ts));
@@ -307,9 +303,9 @@ const Store = {
     const { tableName, opType } = change;
 
     if (opType === 'delete') {
-      if (tableName === 'tasks') this.deleteTask(payload.id);
-      else if (tableName === 'instances') this.deleteInstance(payload.id);
-      else if (tableName === 'notes') this.deleteNote(payload.id);
+      if (tableName === 'tasks') this._deleteTaskLocal(payload.id);
+      else if (tableName === 'instances') this._deleteInstanceLocal(payload.id);
+      else if (tableName === 'notes') this._deleteNoteLocal(payload.id);
       return;
     }
 
@@ -324,45 +320,45 @@ const Store = {
 
   _mergeTask(remote) {
     const local = this.readTasks().find(t => t.id === remote.id);
-    if (!local) { this.writeTask(remote); return; }
+    if (!local) { this._writeTaskLocal(remote); return; }
     if (new Date(remote.createdAt || 0) >= new Date(local.createdAt || 0)) {
-      this.writeTask(remote);
+      this._writeTaskLocal(remote);
     }
   },
 
   _mergeInstance(remote) {
     const local = this.readInstances().find(i => i.id === remote.id);
-    if (!local) { this.writeInstance(remote); return; }
+    if (!local) { this._writeInstanceLocal(remote); return; }
 
-    if (remote.status === 'done') { this.writeInstance(remote); return; }
+    if (remote.status === 'done') { this._writeInstanceLocal(remote); return; }
     if (local.status === 'done') return;
 
     if (remote.seqNumber !== undefined && local.seqNumber !== undefined) {
-      if (remote.seqNumber > local.seqNumber) { this.writeInstance(remote); return; }
+      if (remote.seqNumber > local.seqNumber) { this._writeInstanceLocal(remote); return; }
       if (local.seqNumber > remote.seqNumber) return;
       if (remote.linkNumber === 0 && local.linkNumber > 0) return;
-      if (local.linkNumber === 0 && remote.linkNumber > 0) { this.writeInstance(remote); return; }
+      if (local.linkNumber === 0 && remote.linkNumber > 0) { this._writeInstanceLocal(remote); return; }
     }
 
     const lt = new Date(local.updatedAt || 0);
     const rt = new Date(remote.updatedAt || 0);
-    if (rt > lt) { this.writeInstance(remote); return; }
+    if (rt > lt) { this._writeInstanceLocal(remote); return; }
     if (rt === lt) {
-      if (this._fieldCount(remote) > this._fieldCount(local)) this.writeInstance(remote);
+      if (this._fieldCount(remote) > this._fieldCount(local)) this._writeInstanceLocal(remote);
     }
   },
 
   _mergeEvent(remote) {
     const events = this.readEvents();
     const exists = events.some(e => e.ts === remote.ts && e.taskId === remote.taskId && e.action === remote.action);
-    if (!exists) this.writeEvent(remote);
+    if (!exists) this._writeEventLocal(remote);
   },
 
   _mergeNote(remote) {
     const local = this.readNotes().find(n => n.id === remote.id);
-    if (!local) { this.writeNote(remote); return; }
+    if (!local) { this._writeNoteLocal(remote); return; }
     if (new Date(remote.editedAt || remote.createdAt || 0) >= new Date(local.editedAt || local.createdAt || 0)) {
-      this.writeNote(remote);
+      this._writeNoteLocal(remote);
     }
   },
 
@@ -378,7 +374,7 @@ const Store = {
     allEvents.sort((a, b) => new Date(a.ts) - new Date(b.ts));
     let qty = 0;
     for (const ev of allEvents) qty += ev.action === 'restock' ? ev.qty : -ev.qty;
-    this.writeStock(taskId, { qty, events: allEvents });
+    this._writeStockLocal(taskId, { qty, events: allEvents });
   },
 
   _fieldCount(obj) {
@@ -431,7 +427,6 @@ const fmtDuration = (ms) => {
   return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
 };
 
-// --- Chain helpers ---
 function getLatestDoneSeq(instances, taskId) {
   const done = instances
     .filter(i => i.taskId === taskId && i.status === 'done')
