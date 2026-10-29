@@ -94,44 +94,51 @@
   <script>
 
 
-window.doNukeSync = async function() {
-  if (!confirm('⚠️ This will DELETE the entire sync/ directory on git. Local data is unaffected. Continue?')) return;
-
+window.doNuke = async function() {
   const s = JSON.parse(localStorage.getItem('office-settings') || '{}');
-  if (!s.pat || !s.repo || !s.owner) { alert('Set up GitHub connection first.'); return; }
+  if (!s.pat || !s.repo || !s.owner) { alert('Set up GitHub first.'); return; }
 
-  const branch = s.branch || 'main';
-  const statusEl = document.getElementById('set-status');
-  statusEl.textContent = '🗑️ Deleting sync/…';
-  statusEl.className = 'status';
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const newBranch = `sync_${dateStr}`;
 
-  try {
-    const del = await fetch(
-      `https://api.github.com/repos/${s.owner}/${s.repo}/contents/sync?ref=${branch}`,
-      {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' },
-        body: JSON.stringify({ message: 'nuke sync/', branch })
-      }
-    );
+  if (!confirm(`Create branch "${newBranch}" from main?\nBoth devices must switch to it.`)) return;
 
-    if (del.ok) {
-      statusEl.textContent = '✅ sync/ deleted.';
-      statusEl.className = 'status ok';
-    } else if (del.status === 404) {
-      statusEl.textContent = 'sync/ does not exist (already clean).';
-      statusEl.className = 'status ok';
-    } else {
-      const err = await del.json().catch(() => ({}));
-      statusEl.textContent = `✗ ${err.message || 'HTTP ' + del.status}`;
-      statusEl.className = 'status err';
-    }
-  } catch (e) {
-    statusEl.textContent = `✗ ${e.message}`;
-    statusEl.className = 'status err';
+  // Get main's HEAD sha
+  const mainRes = await fetch(`https://api.github.com/repos/${s.owner}/${s.repo}/branches/main`, {
+    headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' }
+  });
+  const mainData = await mainRes.json();
+
+  // Create new branch from main
+  const createRes = await fetch(`https://api.github.com/repos/${s.owner}/${s.repo}/branches/${newBranch}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' },
+    body: JSON.stringify({ ref: 'refs/heads/main', sha: mainData.commit.sha })
+  });
+
+  if (!createRes.ok) {
+    const err = await createRes.json().catch(() => ({}));
+    alert(`✗ ${err.message || 'HTTP ' + createRes.status}`);
+    return;
   }
-};   
 
+  // Update local settings
+  s.branch = newBranch;
+  localStorage.setItem('office-settings', JSON.stringify(s));
+  document.getElementById('set-branch').value = newBranch;
+
+  // Clear local changes
+  const dKey = `app_data_${getDeviceId()}`;
+  const d = JSON.parse(localStorage.getItem(dKey) || '{}');
+  d.changes = [];
+  d.meta = d.meta || {};
+  delete d.meta.snapshotSeq1;
+  delete d.meta.snapshotSeq2;
+  localStorage.setItem(dKey, JSON.stringify(d));
+
+  document.getElementById('set-status').textContent = `✅ New branch: ${newBranch}. Update device 2 to match.`;
+  document.getElementById('set-status').className = 'status ok';
+};   
     // --- TEMP HACK: Sign In / Out ---
 const BACKUP_KEY = 'office-settings-backup';
 
