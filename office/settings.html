@@ -82,7 +82,6 @@
   <div class="btn-row">
     <button class="btn-snapshot" onclick="doSnapshot()">📦 Create Snapshot</button>
     <button class="btn-restore" onclick="doRestore()">♻️ Restore from Snapshot</button>
-    <button onclick="doNukeSync()" style="background:#dc2626">🗑️ Nuke sync/</button>   
   </div>
   <div id="snap-status" class="status"></div>
 
@@ -92,45 +91,6 @@
   <a href="tasks.html">→ Tasks</a>
   <script src="store.js"></script>
   <script>
-
-
-window.doNukeSync = async function() {
-  if (!confirm('⚠️ This will DELETE the entire sync/ directory on git. Local data is unaffected. Continue?')) return;
-
-  const s = JSON.parse(localStorage.getItem('office-settings') || '{}');
-  if (!s.pat || !s.repo || !s.owner) { alert('Set up GitHub connection first.'); return; }
-
-  const branch = s.branch || 'main';
-  const statusEl = document.getElementById('set-status');
-  statusEl.textContent = '🗑️ Deleting sync/…';
-  statusEl.className = 'status';
-
-  try {
-    const del = await fetch(
-      `https://api.github.com/repos/${s.owner}/${s.repo}/contents/sync?ref=${branch}`,
-      {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' },
-        body: JSON.stringify({ message: 'nuke sync/', branch })
-      }
-    );
-
-    if (del.ok) {
-      statusEl.textContent = '✅ sync/ deleted.';
-      statusEl.className = 'status ok';
-    } else if (del.status === 404) {
-      statusEl.textContent = 'sync/ does not exist (already clean).';
-      statusEl.className = 'status ok';
-    } else {
-      const err = await del.json().catch(() => ({}));
-      statusEl.textContent = `✗ ${err.message || 'HTTP ' + del.status}`;
-      statusEl.className = 'status err';
-    }
-  } catch (e) {
-    statusEl.textContent = `✗ ${e.message}`;
-    statusEl.className = 'status err';
-  }
-};   
 
     // --- TEMP HACK: Sign In / Out ---
 const BACKUP_KEY = 'office-settings-backup';
