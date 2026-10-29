@@ -87,6 +87,13 @@
 
   <div id="cleanup-hint" class="hint-box" style="display:none"></div>
 
+  <h3>Nuke & Restart</h3>
+<p class="info">Creates a new branch from <code>main</code> (kept clean). Old branch and its files become orphaned. Both devices must switch to the new branch.</p>
+<div class="btn-row">
+  <button onclick="doNuke()" style="background:#dc2626">🗑️ Nuke & Start Fresh</button>
+</div>
+<div id="nuke-status" class="status"></div>   
+
   <a href="work.html">→ Back to Work Log</a>
   <a href="tasks.html">→ Tasks</a>
   <script src="store.js"></script>
