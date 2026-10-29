@@ -55,7 +55,7 @@ async function _getAesKey(encKeyHex) {
   return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
-async function encryptForGit(plaintext, encKeyHex) {
+async function encryptForGit1(plaintext, encKeyHex) {
   const key = await _getAesKey(encKeyHex);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -69,7 +69,7 @@ async function encryptForGit(plaintext, encKeyHex) {
   return bytesToBase64(combined);
 }
 
-async function decryptFromGit(b64Data, encKeyHex) {
+async function decryptFromGit1(b64Data, encKeyHex) {
   const bytes = base64ToBytes(b64Data);
   const iv = bytes.slice(0, 12);
   const ciphertext = bytes.slice(12);
@@ -81,7 +81,38 @@ async function decryptFromGit(b64Data, encKeyHex) {
   );
   return new TextDecoder().decode(plaintext);
 }
+async function encryptForGit(plaintext, encKeyHex) {
+  const key = await _getAesKey(encKeyHex);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    new TextEncoder().encode(plaintext)
+  );
+  const combined = new Uint8Array(12 + ciphertext.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(ciphertext), 12);
+  // ★ Return base64 STRING (ASCII-safe) — not raw bytes
+  return bytesToBase64(combined);
+}
 
+async function decryptFromGit(b64Data, encKeyHex) {
+  // b64Data is the GitHub-returned base64 of the file content
+  // File content is a base64 string (ASCII), so decode it first:
+  const clean = b64Data.replace(/[\r\n]/g, '');
+  const fileContent = atob(clean); // → the base64 string we stored
+  // Now decode that base64 string to get the actual encrypted bytes:
+  const bytes = base64ToBytes(fileContent);
+  const iv = bytes.slice(0, 12);
+  const ciphertext = bytes.slice(12);
+  const key = await _getAesKey(encKeyHex);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    ciphertext
+  );
+  return new TextDecoder().decode(plaintext);
+}   
 // ============================================================
 // STORE
 // ============================================================
