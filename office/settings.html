@@ -167,48 +167,71 @@ window.signIn = function() {
 
 window.doNuke = async function() {
   const s = JSON.parse(localStorage.getItem('office-settings') || '{}');
-  if (!s.pat || !s.repo || !s.owner) { alert('Set up GitHub first.'); return; }
+  if (!s.pat || !s.repo || !s.owner) { alert('Set up GitHub connection first.'); return; }
 
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const newBranch = `sync_${dateStr}`;
 
-  if (!confirm(`Create branch "${newBranch}" from main?\nBoth devices must switch to it.`)) return;
+  if (!confirm(`Switch to branch "${newBranch}"?\n\nIf it doesn't exist, it will be created from main.\nBoth devices must use this branch.`)) return;
 
-  // Get main's HEAD sha
-  const mainRes = await fetch(`https://api.github.com/repos/${s.owner}/${s.repo}/branches/main`, {
-    headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' }
-  });
-  const mainData = await mainRes.json();
+  const el = document.getElementById('nuke-status');
+  el.textContent = 'Working…';
+  el.className = 'status';
 
-  // Create new branch from main
-  const createRes = await fetch(`https://api.github.com/repos/${s.owner}/${s.repo}/branches/${newBranch}`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' },
-    body: JSON.stringify({ ref: 'refs/heads/main', sha: mainData.commit.sha })
-  });
+  try {
+    // Check if branch already exists
+    const checkRes = await fetch(
+      `https://api.github.com/repos/${s.owner}/${s.repo}/branches/${newBranch}`,
+      { headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' } }
+    );
 
-  if (!createRes.ok) {
-    const err = await createRes.json().catch(() => ({}));
-    alert(`✗ ${err.message || 'HTTP ' + createRes.status}`);
-    return;
+    if (checkRes.ok) {
+      el.textContent = `ℹ️ Branch "${newBranch}" already exists. Switching to it.`;
+    } else {
+      // Get main's HEAD sha
+      const mainRes = await fetch(
+        `https://api.github.com/repos/${s.owner}/${s.repo}/branches/main`,
+        { headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' } }
+      );
+      if (!mainRes.ok) throw new Error(`Cannot read main: HTTP ${mainRes.status}`);
+      const mainData = await mainRes.json();
+
+      // Create new branch from main
+      const createRes = await fetch(
+        `https://api.github.com/repos/${s.owner}/${s.repo}/branches/${newBranch}`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${s.pat}`, 'Accept': 'application/vnd.github+json' },
+          body: JSON.stringify({ ref: 'main', sha: mainData.commit.sha })
+        }
+      );
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        throw new Error(err.message || `HTTP ${createRes.status}`);
+      }
+      el.textContent = `✅ Branch "${newBranch}" created from main.`;
+    }
+
+    // Update local settings + fill the branch input field
+    s.branch = newBranch;
+    localStorage.setItem('office-settings', JSON.stringify(s));
+    document.getElementById('set-branch').value = newBranch;
+
+    // Clear local changes + snapshot meta
+    const dKey = `app_data_${getDeviceId()}`;
+    const d = JSON.parse(localStorage.getItem(dKey) || '{}');
+    d.changes = [];
+    d.meta = d.meta || {};
+    delete d.meta.snapshotSeq1;
+    delete d.meta.snapshotSeq2;
+    localStorage.setItem(dKey, JSON.stringify(d));
+
+    el.textContent += ` ⚠️ Copy "${newBranch}" to device 2's branch field.`;
+    el.className = 'status ok';
+  } catch (e) {
+    el.textContent = `✗ ${e.message}`;
+    el.className = 'status err';
   }
-
-  // Update local settings
-  s.branch = newBranch;
-  localStorage.setItem('office-settings', JSON.stringify(s));
-  document.getElementById('set-branch').value = newBranch;
-
-  // Clear local changes
-  const dKey = `app_data_${getDeviceId()}`;
-  const d = JSON.parse(localStorage.getItem(dKey) || '{}');
-  d.changes = [];
-  d.meta = d.meta || {};
-  delete d.meta.snapshotSeq1;
-  delete d.meta.snapshotSeq2;
-  localStorage.setItem(dKey, JSON.stringify(d));
-
-  document.getElementById('set-status').textContent = `✅ New branch: ${newBranch}. Update device 2 to match.`;
-  document.getElementById('set-status').className = 'status ok';
 };   
 
 window.signIn1 = function() {
