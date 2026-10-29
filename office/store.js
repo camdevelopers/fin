@@ -288,12 +288,13 @@ const Store = {
     const csv = `tableName,opType,payload\n${change.tableName},${change.opType},"${change.payloadJSON.replace(/"/g, '""')}"`;
     const filePath = `sync/${changeId}.csv`;
 
-    let base64;
-    if (settings.encKey) {
-      base64 = await encryptForGit(csv, settings.encKey);
-    } else {
-      base64 = btoa(unescape(encodeURIComponent(csv)));
-    }
+let base64;
+if (settings.encKey) {
+  // ★ Double-encode: btoa(ourBase64String) so GitHub stores ASCII text
+  base64 = btoa(await encryptForGit(csv, settings.encKey));
+} else {
+  base64 = btoa(unescape(encodeURIComponent(csv)));
+}
 
     const url = `https://api.github.com/repos/${settings.owner}/${settings.repo}/contents/${filePath}`;
     const res = await fetch(url, {
