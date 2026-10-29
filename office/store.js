@@ -356,7 +356,7 @@ if (settings.encKey) {
     for (const file of files) {
       if (file.type !== 'file') continue;
       const fname = file.name.replace('.csv', '');
-      if (fname.startsWith(myPrefix)) continue;
+      //if (fname.startsWith(myPrefix)) continue;
       if (existingIds.has(fname)) continue;
 
       const fRes = await fetch(file.url, {
