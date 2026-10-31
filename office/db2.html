@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard v2</title>
+  <title>Dashboard v3</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
@@ -238,6 +238,7 @@
     <a href="work.html">→ Work Log</a>
     <a href="tasks.html">→ Tasks</a>
     <a href="settings.html">→ Settings</a>
+    <button class="btn-pull" onclick="doPull()">Refresh</button>
   </div>
 
   <script>
@@ -246,6 +247,7 @@
   </script>
   <script src="store.js"></script>
   <script>
+    doPull()
     let selectedDate = new Date();
     selectedDate.setHours(0, 0, 0, 0);
 
