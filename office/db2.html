@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dashboard v4</title>
+  <title>Dashboard v5</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
@@ -239,6 +239,7 @@
     <a href="tasks.html">→ Tasks</a>
     <a href="settings.html">→ Settings</a>
     <button class="btn-pull" onclick="doPull()">Refresh</button>
+     <span id="pull-status" class="status-msg"></span>
   </div>
 
   <script>
@@ -247,7 +248,20 @@
   </script>
   <script src="store.js"></script>
   <script>
-    //doPull()
+        window.doPull = async function() {
+      const el = document.getElementById('pull-status');
+      el.textContent = '⬇ Pulling…';
+      try {
+        const count = await Store.syncPull();
+        el.textContent = `✓ Pulled ${count} change(s)`;
+      } catch (err) {
+        el.textContent = `✗ ${err.message}`;
+      }
+      setTimeout(() => el.textContent = '', 4000);
+      render();
+    };
+    
+    doPull()
     let selectedDate = new Date();
     selectedDate.setHours(0, 0, 0, 0);
 
