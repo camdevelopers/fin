@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; max-width: 700px; margin: 0 auto; padding: 1rem; }
+    h2 { margin-bottom: 0.5rem; }
+    h3 { margin: 1.2rem 0 0.5rem; font-size: 0.95rem; }
+    .readonly-badge { font-size: 0.7rem; background: #fee2e2; color: #991b1b; padding: 0.15rem 0.5rem; border-radius: 3px; vertical-align: middle; }
+    .date-nav { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; padding: 0.5rem 0.75rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; }
+    .date-nav button { padding: 0.3rem 0.7rem; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; background: #fff; font-size: 1rem; }
+    .date-nav button:hover { background: #f3f4f6; }
+    .date-nav .today-btn { background: #2563eb; color: #fff; border-color: #2563eb; font-size: 0.8rem; font-weight: 600; }
+    .date-label { flex: 1; text-align: center; font-weight: 600; font-size: 0.9rem; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.75rem; margin: 0.5rem 0; }
+    .card.inactive { opacity: 0.55; }
+    .card.done { border-left: 3px solid #059669; opacity: 0.7; }
+    .card.leave { border-left: 3px solid #f59e0b; }
+    .card.ignored { border-left: 3px solid #6b7280; opacity: 0.6; }
+    .card.missed { border-left: 3px solid #dc2626; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+    .card-header strong { font-size: 0.95rem; }
+    .card-meta { font-size: 0.8rem; color: #6b7280; }
+    .badge { font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 3px; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-done { background: #d1fae5; color: #065f46; }
+    .badge-low { background: #fee2e2; color: #991b1b; }
+    .badge-ok { background: #d1fae5; color: #065f46; }
+    .badge-standalone { background: #e5e7eb; color: #374151; }
+    .badge-dep { background: #ede9fe; color: #5b21b6; }
+    .badge-leave { background: #fef3c7; color: #92400e; }
+    .badge-ignore { background: #e5e7eb; color: #6b7280; }
+    .stock-bar-bg { height: 6px; background: #e5e7eb; border-radius: 3px; margin-top: 0.4rem; overflow: hidden; }
+    .stock-bar-fill { height: 100%; background: #059669; border-radius: 3px; }
+    .stock-bar-fill.low { background: #dc2626; }
+    .stock-label { font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem; }
+    .att-entry { font-size: 0.85rem; padding: 0.25rem 0; border-bottom: 1px solid #f3f4f6; }
+    .att-summary { font-size: 0.9rem; font-weight: 600; margin-top: 0.5rem; padding: 0.4rem; background: #f0fdf4; border-radius: 4px; }
+    .events-log { margin-top: 1.5rem; }
+    .event-row { font-size: 0.8rem; padding: 0.25rem 0; border-bottom: 1px solid #f3f4f6; color: #374151; }
+    .event-row .ts { color: #6b7280; }
+    a { display: inline-block; margin-top: 1rem; color: #2563eb; text-decoration: none; }
+    .muted { color: #6b7280; }
+    .note-item { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.5rem 0.6rem; border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 0.4rem; }
+    .note-item.done { opacity: 0.6; }
+    .note-item.done .note-text { text-decoration: line-through; }
+    .note-text { flex: 1; font-size: 0.9rem; }
+    .section { border: 2px solid #111; border-radius: 10px; padding: 0.75rem 1rem; margin: 0.75rem 0; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    .section h3 { margin-top: 0; }
+    #sec-ignored { border-left: 4px solid #6b7280; }
+    #sec-leave { border-left: 4px solid #f59e0b; }
+    details#sec-ignored summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; }
+
+    /* Celebrations */
+    #sec-celebrations { border-left: 4px solid #d946ef; }
+    .card.celebration { border-left: 3px solid #d946ef; background: #fdf4ff; }
+    .card.celebration-today { border-left: 4px solid #d946ef; background: #fce7f3; box-shadow: 0 0 8px rgba(217,70,239,0.3); }
+    .badge-celebration { background: #fbcfe8; color: #9d174d; }
+
+    /* Enquiries */
+    #sec-enquiries { border-left: 4px solid #0891b2; }
+    details#sec-enquiries summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; }
+    .enquiry-item { border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.5rem 0.6rem; margin-bottom: 0.4rem; }
+    .enquiry-item.resolved { border-left: 3px solid #059669; background: #f0fdf4; opacity: 0.75; }
+    .enquiry-item.open { border-left: 3px solid #0891b2; }
+    .enquiry-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem; }
+    .enquiry-header strong { font-size: 0.9rem; }
+    .enquiry-updates { font-size: 0.78rem; color: #6b7280; margin-top: 0.3rem; }
+    .enquiry-updates div { padding: 0.15rem 0; border-bottom: 1px solid #f3f4f6; }
+
+
+
+
+
+    body.settings-locked > :not(#settings-unlock-panel) {
+  visibility: hidden;
+}
+
+#settings-unlock-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  background: white;
+}
+
+#settings-unlock-panel[hidden] {
+  display: none;
+}
+
+#settings-unlock-panel input {
+  padding: 0.5rem;
+}
+
+#settings-unlock-panel [role="alert"] {
+  color: #b91c1c;
+}
+
+
+
+    
+  </style>
+</head>
+<body class="settings-locked">
+
+  <!-- UNLOCK PANEL -->
+  <div id="settings-unlock-panel">
+  <label for="settings-key">Enter settings key</label>
+  <input id="settings-key" type="password" autocomplete="off">
+  <button id="unlock-button" type="button">Unlock</button>
+  <span id="key-error" role="alert"></span>
+</div>  <!-- UNLOCK PANEL END-->
+
+
+<script>
+  // SCRPT FOR UNLOCK PANEL
+(() => {
+  const ENCRYPTED_SETTINGS_BUNDLE =
+    '{"v":1,"iv":"uLSdTaC27fgE3rSo","ciphertext":"qOyBQHXzUoc/Z7fudbV/wfbvP+0/VUi2DBcYwPMv8YtsHuBj5c+fqhi2w7nsm4VtlRcIrZlsBllKAvst90WIMsvb3o1WViSwW+gZlHl6SQ2zRIuZKqZSG3RfpBBbxyLr5Fw11bcUcTCdfFxyc/kTRkrQH3Nbk8bb5gTqDrfbz24teUvucSAVcd/nsBSRcQeVdYaK7ldmpM9aLDYXnD/bmdi/P/vBw2L7+SOby0IP3V4x3HSG4eTwxLnQlPrNjNi5CF1esnrwmICjodgTKenN9BbkdkUXNlUxAGFKWtWPY9qihzSeOLx48T2DPunrlTUkkka0m/6M0KlcDGxZXF7gfZ9Wbm9JTZups73t"}';
+
+  const panel = document.getElementById('settings-unlock-panel');
+  const keyInput = document.getElementById('settings-key');
+  const unlockButton = document.getElementById('unlock-button');
+  const errorMessage = document.getElementById('key-error');
+
+  function showDashboard() {
+    panel.hidden = true;
+    document.body.classList.remove('settings-locked');
+  }
+
+  function fromBase64(text) {
+    return Uint8Array.from(atob(text), char => char.charCodeAt(0));
+  }
+
+  async function decryptSettingsBundle(encryptedText, keyHex) {
+    if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) {
+      throw new Error('Invalid key');
+    }
+
+    const keyBytes = Uint8Array.from(
+      keyHex.match(/.{2}/g),
+      pair => parseInt(pair, 16)
+    );
+
+    const bundle = JSON.parse(encryptedText);
+    if (bundle.v !== 1 || !bundle.iv || !bundle.ciphertext) {
+      throw new Error('Invalid encrypted settings');
+    }
+
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      keyBytes,
+      { name: 'AES-GCM' },
+      false,
+      ['decrypt']
+    );
+
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: fromBase64(bundle.iv) },
+      cryptoKey,
+      fromBase64(bundle.ciphertext)
+    );
+
+    return JSON.parse(new TextDecoder().decode(plaintext));
+  }
+
+  const existingSettings = JSON.parse(
+    localStorage.getItem('office-settings') || '{}'
+  );
+
+  if (existingSettings.owner && existingSettings.repo && existingSettings.pat) {
+    showDashboard();
+    return;
+  }
+
+  panel.hidden = false;
+
+  unlockButton.addEventListener('click', async () => {
+    errorMessage.textContent = '';
+    unlockButton.disabled = true;
+
+    try {
+      const settings = await decryptSettingsBundle(
+        ENCRYPTED_SETTINGS_BUNDLE,
+        keyInput.value.trim()
+      );
+
+      if (!settings.owner || !settings.repo || !settings.pat) {
+        throw new Error('Missing required settings');
+      }
+
+      localStorage.setItem('office-settings', JSON.stringify(settings));
+      keyInput.value = '';
+
+      // Reload so existing app scripts start with the restored settings.
+      location.reload();
+    } catch {
+      errorMessage.textContent =
+        'Could not unlock settings. Check the key and try again.';
+      unlockButton.disabled = false;
+    }
+  });
+})(); //END OF SCRPT FOR UNLOCK PANEL
+</script>
+
+
+
+  
+  
+  <h2>Dashboard <span class="readonly-badge">READ ONLY</span></h2>
+
+  <div class="date-nav">
+    <button onclick="prevDay()">‹</button>
+    <span class="date-label" id="date-label"></span>
+    <button onclick="nextDay()">›</button>
+    <button class="today-btn" onclick="goToday()">Today</button>
+  </div>
+
+  <div class="section" id="sec-celebrations"></div>
+  <div class="section" id="sec-attendance"></div>
+  <div class="section" id="sec-missed"></div>
+  <div class="section" id="sec-leave"></div>
+  <div class="section" id="sec-current"></div>
+  <div class="section" id="sec-upcoming"></div>
+  <div class="section" id="sec-completed"></div>
+  <div class="section" id="sec-notes"></div>
+  <details class="section" id="sec-enquiries"><summary>📩 Enquiries</summary><div id="sec-enquiries-content"></div></details>
+  <details class="section" id="sec-ignored"><summary>🚫 Ignored</summary><div id="sec-ignored-content"></div></details>
+
+  <div class="events-log" id="events-log"></div>
+
+  <div style="margin-top:1.5rem">
+    <a href="work.html">→ Work Log</a>
+    <a href="tasks.html">→ Tasks</a>
+    <a href="settings.html">→ Settings</a>
+  </div>
+
+  <script>
+    // *** HARDCODE THIS: 1 or 2 ***
+   // window.DEVICE_ID = 1;
+  </script>
+  <script src="store.js"></script>
+  <script>
+    let selectedDate = new Date();
+    selectedDate.setHours(0, 0, 0, 0);
+
+    function localDateStr(dateOrIso) {
+      const d = typeof dateOrIso === 'string' ? new Date(dateOrIso) : dateOrIso;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    function dayStr() { return localDateStr(selectedDate); }
+    function dayEnd() { const d = new Date(selectedDate); d.setHours(23, 59, 59, 999); return d; }
+    function dayStart() { const d = new Date(selectedDate); d.setHours(0, 0, 0, 0); return d; }
+    function isToday() { return dayStr() === localDateStr(new Date()); }
+
+    window.prevDay = function() { selectedDate.setDate(selectedDate.getDate() - 1); render(); };
+    window.nextDay = function() { selectedDate.setDate(selectedDate.getDate() + 1); render(); };
+    window.goToday = function() { selectedDate = new Date(); selectedDate.setHours(0,0,0,0); render(); };
+
+    // --- Celebration Helpers ---
+    function nextCelebrationDate(task, refDate) {
+      const base = new Date(task.config.date + 'T00:00:00');
+      const ref = new Date(refDate); ref.setHours(0,0,0,0);
+      if (task.config.repeat === 'annual') {
+        if (base < ref) base.setFullYear(base.getFullYear() + 1);
+        while (base < ref) base.setFullYear(base.getFullYear() + 1);
+      }
+      return base;
+    }
+
+    function renderCelebrations() {
+      const container = document.getElementById('sec-celebrations');
+      const tasks = Store.readTasks().filter(t => t.type === 'celebration');
+      const today = new Date(); today.setHours(0,0,0,0);
+      const selDay = new Date(selectedDate); selDay.setHours(0,0,0,0);
+
+      let items = [];
+      for (const task of tasks) {
+        const next = nextCelebrationDate(task, selDay);
+        if (isToday()) {
+          // Today view: show if within 7 days from today
+          const in7 = new Date(today); in7.setDate(in7.getDate() + 7); in7.setHours(23,59,59,999);
+          if (next >= today && next <= in7) items.push({ task, next });
+        } else {
+          // Past/future view: show if celebration falls on selectedDate
+          if (next.toDateString() === selDay.toDateString()) items.push({ task, next });
+        }
+      }
+
+      if (!items.length) { container.innerHTML = ''; return; }
+
+      let html = '<h3>🎂 Celebrations</h3>';
+      for (const { task, next } of items) {
+        const isOnDay = next.toDateString() === selDay.toDateString();
+        const cls = isOnDay ? 'card celebration celebration-today' : 'card celebration';
+        const daysLeft = Math.round((next - selDay) / 86400000);
+        const label = isOnDay ? '🎉 This day!' : daysLeft === 1 ? 'Tomorrow' : `In ${daysLeft} days`;
+        html += `<div class="${cls}"><div class="card-header"><strong>${task.name}</strong><span class="badge badge-celebration">${label}</span></div><div class="card-meta">${next.toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})} · ${task.config.repeat}</div></div>`;
+      }
+      container.innerHTML = html;
+    }
+
+    // --- Enquiries (read-only, date-aware) ---
+    function renderEnquiries() {
+      const container = document.getElementById('sec-enquiries-content');
+      const events = Store.readEvents();
+      const enqEvents = events.filter(e => e.taskId.startsWith('enq-'));
+      const groups = {};
+      for (const e of enqEvents) {
+        if (!groups[e.taskId]) groups[e.taskId] = [];
+        groups[e.taskId].push(e);
+      }
+
+      const ds = dayStr();
+      const refEnd = dayEnd();
+      const enquiries = [];
+
+      for (const [taskId, evts] of Object.entries(groups)) {
+        evts.sort((a, b) => new Date(a.ts) - new Date(b.ts));
+        const createEv = evts.find(e => e.action === 'create');
+        if (!createEv) continue;
+        // Only show if created on or before this day
+        if (localDateStr(createEv.ts) > ds) continue;
+
+        // Determine status as of end of this day
+        const closeEv = evts.find(e => e.action === 'close' && new Date(e.ts) <= refEnd);
+        if (closeEv) continue; // closed by this day → don't show
+
+        const resolveEv = evts.find(e => e.action === 'resolve' && new Date(e.ts) <= refEnd);
+        let status = 'open';
+        if (resolveEv) {
+          status = 'resolved';
+          // If resolved and now is past 24h from resolution (only relevant for today view)
+          if (isToday() && (now() - new Date(resolveEv.ts) > 86400000)) continue;
+        }
+
+        // Show updates that happened on or before this day
+        const updates = evts.filter(e => e.action === 'update' && new Date(e.ts) <= refEnd).map(e => ({ text: e.note, ts: e.ts }));
+        // Highlight updates that happened ON this day
+        const dayUpdates = updates.filter(u => localDateStr(u.ts) === ds);
+
+        enquiries.push({ id: taskId, text: createEv.note, updates, dayUpdates, status, createdAt: createEv.ts, resolvedAt: resolveEv ? resolveEv.ts : null });
+      }
+
+      let html = '';
+      if (!enquiries.length) html += '<p class="muted">No enquiries.</p>';
+      else html += enquiries.map(e => {
+        const cls = e.status === 'resolved' ? 'enquiry-item resolved' : 'enquiry-item open';
+        const badge = e.status === 'resolved' ? '<span class="badge badge-done">resolved</span>' : '<span class="badge badge-pending">open</span>';
+        let h = `<div class="${cls}"><div class="enquiry-header"><strong>${e.text}</strong>${badge}</div>`;
+        h += `<div class="card-meta">Created: ${fmtDate(e.createdAt)} ${fmtTime(e.createdAt)}</div>`;
+        if (e.updates.length) {
+          h += '<div class="enquiry-updates">';
+          for (const u of e.updates) {
+            const isDay = localDateStr(u.ts) === ds;
+            h += `<div style="${isDay ? 'font-weight:600;color:#0891b2' : ''}">${fmtDate(u.ts)} ${fmtTime(u.ts)} — ${u.text}</div>`;
+          }
+          h += '</div>';
+        }
+        if (e.status === 'resolved') h += `<div class="card-meta" style="margin-top:0.3rem">✓ Resolved ${fmtDate(e.resolvedAt)} ${fmtTime(e.resolvedAt)}</div>`;
+        h += '</div>';
+        return h;
+      }).join('');
+      container.innerHTML = html;
+    }
+
+    // --- Main Render ---
+    function render() {
+      const tasks = Store.readTasks();
+      const instances = Store.readInstances();
+      const events = Store.readEvents();
+      const notes = Store.readNotes();
+      const ds = dayStr();
+      const refTime = dayEnd();
+
+      document.getElementById('date-label').textContent = selectedDate.toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+
+      // Celebrations
+      renderCelebrations();
+
+      // Attendance
+      const attTasks = tasks.filter(t => t.type === 'attendance');
+      const attC = document.getElementById('sec-attendance');
+      if (attTasks.length) {
+        const attEvents = events.filter(e => e.taskId === 'attendance' && e.ts.slice(0, 10) === ds);
+        let html = '<h3>🕐 Attendance</h3>';
+        let totalMs = 0;
+        for (let i = 0; i < attEvents.length; i++) {
+          if (attEvents[i].action === 'checkin') {
+            const nx = attEvents[i + 1];
+            if (nx && nx.action === 'checkout') totalMs += new Date(nx.ts) - new Date(attEvents[i].ts);
+          }
+        }
+        html += `<div class="att-summary">Total present: <strong>${totalMs > 0 ? fmtDuration(totalMs) : '0m'}</strong></div>`;
+        if (attEvents.length) {
+          let i = 0;
+          while (i < attEvents.length) {
+            const ev = attEvents[i];
+            if (ev.action === 'checkin') {
+              const nx = attEvents[i + 1];
+              const co = nx && nx.action === 'checkout' ? nx : null;
+              html += `<div class="card"><div class="att-entry"><strong>#${Math.ceil((i + 1) / 2)}</strong> In: <strong>${fmtTime(ev.ts)}</strong> | Out: <strong>${co ? fmtTime(co.ts) : '—'}</strong></div></div>`;
+              i += co ? 2 : 1;
+            } else i++;
+          }
+        } else html += '<p class="muted">No entries.</p>';
+        attC.innerHTML = html;
+      } else attC.innerHTML = '<h3>🕐 Attendance</h3><p class="muted">No attendance task configured.</p>';
+
+      // Categorize
+      const missed = [], leave = [], current = [], upcoming = [], completed = [], ignored = [];
+      for (const task of tasks) {
+        if (task.type === 'attendance' || task.type === 'celebration') continue;
+
+        if (task.type === 'quantity') {
+          const stock = Store.readStock(task.id);
+          const isLow = stock.qty <= task.config.threshold;
+          const pInst = instances.find(i => i.taskId === task.id && (i.status === 'pending' || i.status === 'leave') && i.dueAt.slice(0, 10) === ds);
+          const lastDone = instances.filter(i => i.taskId === task.id && i.status === 'done' && i.updatedAt.slice(0, 10) === ds).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+          if (pInst || isLow) current.push({ task, instance: pInst || null, stock, isLow, inactive: !isLow && !pInst });
+          if (lastDone) completed.push({ task, instance: lastDone });
+          continue;
+        }
+
+        const tInsts = instances.filter(i => i.taskId === task.id);
+        tInsts.filter(i => i.status === 'ignore' && i.updatedAt.slice(0, 10) === ds)
+          .forEach(inst => ignored.push({ task, instance: inst }));
+        const pInst = tInsts.find(i => ['pending', 'doing', 'will_do'].includes(i.status) && i.dueAt.slice(0, 10) === ds);
+        const lInst = tInsts.find(i => i.status === 'leave' && i.dueAt.slice(0, 10) === ds);
+        const lastDone = tInsts.filter(i => i.status === 'done' && i.updatedAt.slice(0, 10) === ds).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))[0];
+
+        if (lInst) leave.push({ task, instance: lInst });
+        if (pInst) {
+          const hrs = (new Date(pInst.dueAt) - refTime) / 3600000;
+          if (hrs < 0) missed.push({ task, instance: pInst });
+          else if (hrs <= task.currentHrs) current.push({ task, instance: pInst });
+          else if (hrs <= task.upcomingHrs) upcoming.push({ task, instance: pInst });
+        }
+        if (lastDone) completed.push({ task, instance: lastDone });
+      }
+
+      // Celebrations that passed → completed
+      const celebTasks = tasks.filter(t => t.type === 'celebration');
+      for (const task of celebTasks) {
+        const next = nextCelebrationDate(task, selectedDate);
+        if (next.toDateString() === selectedDate.toDateString()) {
+          completed.push({ task, instance: { updatedAt: task.config.date + 'T00:00:00' } });
+        }
+      }
+
+      document.getElementById('sec-missed').innerHTML = section('⚠️ Missed', missed, card);
+      document.getElementById('sec-leave').innerHTML = section('🏖 Leave', leave, card);
+      document.getElementById('sec-current').innerHTML = section('📋 Current', current, card);
+      document.getElementById('sec-upcoming').innerHTML = section('📅 Upcoming', upcoming, card);
+      document.getElementById('sec-completed').innerHTML = section('✅ Completed', completed, doneCard);
+      document.getElementById('sec-ignored-content').innerHTML = section('', ignored, ignoredCard);
+
+      // Notes (read-only)
+      const notesC = document.getElementById('sec-notes');
+      let nHtml = '<h3>📝 Notes</h3>';
+      if (!notes.length) nHtml += '<p class="muted">No notes.</p>';
+      else nHtml += notes.map(n => `<div class="note-item${n.done ? ' done' : ''}"><span class="note-text">${n.text}</span></div>`).join('');
+      notesC.innerHTML = nHtml;
+
+      // Enquiries
+      renderEnquiries();
+
+      // Event log (hide enquiry events)
+      const visibleEvents = events.filter(e => e.ts.slice(0, 10) === ds && !e.taskId.startsWith('enq-'));
+      const lc = document.getElementById('events-log');
+      if (visibleEvents.length) {
+        lc.innerHTML = '<h3>📜 Activity Log</h3>' + visibleEvents.slice(-30).reverse().map(e =>
+          `<div class="event-row"><span class="ts">${new Date(e.ts).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span> <strong>${e.action}</strong> ${e.taskId}${e.note ? ' — ' + e.note : ''}</div>`
+        ).join('');
+      } else lc.innerHTML = '';
+    }
+
+    function section(title, items, fn) {
+      if (!items.length) return title ? `<h3>${title}</h3><p class="muted">Nothing here.</p>` : '<p class="muted">Nothing here.</p>';
+      return (title ? `<h3>${title}</h3>` : '') + items.map(fn).join('');
+    }
+
+    function card({ task, instance, stock, isLow, inactive }) {
+      let h = `<div class="card${inactive ? ' inactive' : ''}${instance && instance.status === 'leave' ? ' leave' : ''}${instance && instance.status === 'pending' && new Date(instance.dueAt) < dayEnd() ? ' missed' : ''}">`;
+      h += `<div class="card-header"><strong>${task.name}</strong>`;
+      if (task.type === 'dependency') h += '<span class="badge badge-dep">⚡ dep</span>';
+      else if (task.type === 'standalone') h += '<span class="badge badge-standalone">one-time</span>'
+      else {
+        const bc = instance ? (instance.status === 'leave' ? 'badge-leave' : 'badge-pending') : (isLow ? 'badge-low' : 'badge-ok');
+        const bt = instance ? (instance.status === 'leave' ? 'leave' : instance.status) : (isLow ? 'LOW' : 'ok');
+        h += `<span class="badge ${bc}">${bt}</span>`;
+      }
+      h += '</div>';
+      if (instance) {
+        const due = new Date(instance.dueAt);
+        h += `<div class="card-meta">Due: ${fmtDate(due)} ${fmtTime(due)}</div>`;
+      }
+      if (task.type === 'quantity' && stock) {
+        const th = task.config.threshold;
+        const max = Math.max(stock.qty, th * 3, 10);
+        const pct = Math.min((stock.qty / max) * 100, 100);
+        h += `<div class="stock-label">Stock: <strong>${stock.qty}</strong> / threshold ${th}</div>`;
+        h += `<div class="stock-bar-bg"><div class="stock-bar-fill${isLow ? ' low' : ''}" style="width:${pct}%"></div></div>`;
+      }
+      h += '</div>';
+      return h;
+    }
+
+    function doneCard({ task, instance }) {
+      let extra = '';
+      if (task.type === 'celebration') extra = `<div class="card-meta">🎂 ${task.config.repeat}</div>`;
+      return `<div class="card done"><div class="card-header"><strong>${task.name}</strong><span class="badge badge-done">done</span></div>${extra}<div class="card-meta">Done: ${fmtDate(instance.updatedAt)} ${fmtTime(instance.updatedAt)}</div></div>`;
+    }
+
+    function ignoredCard({ task, instance }) {
+      return `<div class="card ignored"><div class="card-header"><strong>${task.name}</strong><span class="badge badge-ignore">ignored</span></div><div class="card-meta">Ignored: ${fmtDate(instance.updatedAt)} ${fmtTime(instance.updatedAt)}</div></div>`;
+    }
+
+    render();
+  </script>
+</body>
+</html>   
