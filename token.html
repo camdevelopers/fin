@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Builder</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2330; --muted:#667085; --line:#d9dde4; --accent:#2f5bea; --danger:#c62828; --ok:#1b7f3b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2128; --text:#e8eaee; --muted:#9aa3b2; --line:#323945; --accent:#6d8cff; --danger:#ef6b6b; --ok:#4cc275; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:24px 16px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p.sub { color:var(--muted); margin:0 0 20px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  .row { display:flex; gap:8px; margin-bottom:8px; }
+  .row input { flex:1; }
+  .row input.nick { flex:0 0 36%; }
+  input, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); font:inherit; }
+  textarea { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; min-height:90px; resize:vertical; word-break:break-all; }
+  input.mono { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; }
+  button { padding:8px 14px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--text); font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.del { color:var(--danger); padding:8px 10px; }
+  .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  .msg { margin-top:10px; font-size:14px; min-height:20px; }
+  .msg.err { color:var(--danger); }
+  .msg.ok { color:var(--ok); }
+  .warn { font-size:13px; color:var(--muted); border-left:3px solid var(--accent); padding-left:10px; margin-top:12px; }
+  details summary { cursor:pointer; font-weight:600; }
+  .hp { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+  .inline { display:flex; gap:8px; }
+  .inline input { flex:1; }
+  #printSheet { display:none; }
+  #printSheet pre { white-space:pre-wrap; word-break:break-all; font:13px/1.4 ui-monospace,Menlo,Consolas,monospace; border:1px solid #999; padding:10px; }
+  @media print {
+    body { background:#fff; color:#000; }
+    main > h1, main > p.sub, main > section { display:none !important; }
+    #printSheet { display:block; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Token Builder</h1>
+  <p class="sub">Add your variables, encrypt them with AES-256-GCM, and copy the bundle and key. Keep this page private (run it locally, don't publish it).</p>
+
+  <section>
+    <h2>1. Variables</h2>
+    <div id="rows"></div>
+    <div class="actions">
+      <button id="addRow" type="button">+ Add variable</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Key</h2>
+    <label for="key">64-character hex key (leave as generated, or paste an existing key to keep current users' key valid)</label>
+    <input id="key" class="mono" spellcheck="false" autocomplete="off">
+    <div class="actions">
+      <button id="genKey" type="button">Generate new key</button>
+      <button id="copyKey" type="button">Copy key</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. Encrypt</h2>
+    <div class="actions" style="margin-top:0">
+      <button id="encrypt" class="primary" type="button">Encrypt variables</button>
+    </div>
+    <div id="encMsg" class="msg"></div>
+    <label for="bundle">Encrypted bundle (hardcode this in login.html)</label>
+    <textarea id="bundle" readonly></textarea>
+    <div class="actions">
+      <button id="copyBundle" type="button">Copy bundle</button>
+    </div>
+    <div class="warn">A new random IV is used each time, so encrypting the same data again produces a different bundle. Both still decrypt with the same key.</div>
+  </section>
+
+  <section>
+    <h2>4. Meta bundle (safe to store in the cloud)</h2>
+    <p class="sub" style="margin-bottom:8px">Wraps the key and the encrypted bundle together under a separate meta key. Keep the meta key on paper or in your browser's password manager, and store only the meta bundle in the cloud.</p>
+
+    <form id="metaForm" autocomplete="on">
+      <input class="hp" type="text" name="username" value="token-builder-meta-key" autocomplete="username" tabindex="-1" aria-hidden="true">
+      <label for="metaKey">Meta key (64-character hex)</label>
+      <div class="inline">
+        <input id="metaKey" name="password" type="password" class="mono" spellcheck="false" autocomplete="current-password">
+        <button id="showMeta" type="button">Show</button>
+      </div>
+      <div class="actions">
+        <button id="genMeta" type="button">Generate meta key</button>
+        <button id="copyMeta" type="button">Copy meta key</button>
+        <button id="saveMeta" type="submit">Save in browser password manager</button>
+      </div>
+    </form>
+
+    <div class="actions" style="margin-top:14px">
+      <button id="metaEnc" class="primary" type="button">Encrypt key + bundle into meta bundle</button>
+      <button id="metaDec" type="button">Decrypt meta bundle</button>
+    </div>
+    <div id="metaMsg" class="msg"></div>
+
+    <label for="metaBundle">Meta bundle (output of encrypt, or paste one here to decrypt)</label>
+    <textarea id="metaBundle"></textarea>
+    <div class="actions">
+      <button id="copyMetaBundle" type="button">Copy meta bundle</button>
+      <button id="printMeta" type="button">Print recovery sheet</button>
+    </div>
+    <div class="warn">Encrypt uses the key from section 2 and the bundle from section 3. Decrypt fills those two fields back in and also reloads your variables into the form in section 1.</div>
+  </section>
+
+  <section>
+    <details>
+      <summary>Load an existing bundle to edit it</summary>
+      <label for="oldBundle">Encrypted bundle</label>
+      <textarea id="oldBundle"></textarea>
+      <label for="oldKey">Key</label>
+      <input id="oldKey" class="mono" spellcheck="false" autocomplete="off">
+      <div class="actions">
+        <button id="decrypt" type="button">Decrypt and load into the form</button>
+      </div>
+      <div id="decMsg" class="msg"></div>
+    </details>
+  </section>
+
+  <div id="printSheet">
+    <h2>Token Builder: Recovery Sheet</h2>
+    <p>Printed: <span id="pDate"></span></p>
+    <p><strong>Meta key</strong> (keep this paper somewhere safe, separate from the cloud copy):</p>
+    <pre id="pKey"></pre>
+    <p><strong>Meta bundle</strong> (backup copy):</p>
+    <pre id="pBundle"></pre>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var HEX64 = /^[0-9a-fA-F]{64}$/;
+
+  // ---------- helpers ----------
+  function hexToBytes(hex) {
+    var out = new Uint8Array(hex.length / 2);
+    for (var i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+    return out;
+  }
+  function bytesToHex(bytes) {
+    return Array.prototype.map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+  }
+  function bytesToB64(bytes) {
+    var s = "";
+    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
+  }
+  function b64ToBytes(b64) {
+    var s = atob(b64.replace(/\s+/g, ""));
+    var out = new Uint8Array(s.length);
+    for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+    return out;
+  }
+  function setMsg(el, text, cls) { el.textContent = text; el.className = "msg " + (cls || ""); }
+  function importKey(hex, usage) {
+    return crypto.subtle.importKey("raw", hexToBytes(hex), { name: "AES-GCM" }, false, [usage]);
+  }
+
+  // ---------- encrypt / decrypt ----------
+  // Bundle format: base64( IV[12 bytes] + ciphertext + GCM tag ), plaintext = JSON {nickname: value}
+  async function encryptObject(obj, keyHex) {
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    var key = await importKey(keyHex, "encrypt");
+    var data = new TextEncoder().encode(JSON.stringify(obj));
+    var ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, data));
+    var all = new Uint8Array(iv.length + ct.length);
+    all.set(iv, 0);
+    all.set(ct, iv.length);
+    return bytesToB64(all);
+  }
+  async function decryptBundle(b64, keyHex) {
+    var all = b64ToBytes(b64);
+    var iv = all.slice(0, 12);
+    var ct = all.slice(12);
+    var key = await importKey(keyHex, "decrypt");
+    var pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, ct);
+    return JSON.parse(new TextDecoder().decode(pt));
+  }
+
+  // ---------- rows ----------
+  function addRow(nick, val) {
+    var row = document.createElement("div");
+    row.className = "row";
+    var n = document.createElement("input");
+    n.className = "nick"; n.placeholder = "nickname (e.g. API_URL)"; n.spellcheck = false; n.value = nick || "";
+    var v = document.createElement("input");
+    v.placeholder = "value"; v.spellcheck = false; v.value = val || "";
+    var d = document.createElement("button");
+    d.type = "button"; d.className = "del"; d.textContent = "\u2715"; d.title = "Remove";
+    d.onclick = function () { row.remove(); };
+    row.appendChild(n); row.appendChild(v); row.appendChild(d);
+    $("rows").appendChild(row);
+    return n;
+  }
+  function collect() {
+    var obj = {}, seen = {};
+    var rows = $("rows").children;
+    for (var i = 0; i < rows.length; i++) {
+      var inputs = rows[i].querySelectorAll("input");
+      var name = inputs[0].value.trim();
+      var value = inputs[1].value;
+      if (!name && !value) continue; // ignore blank rows
+      if (!name) throw new Error("Row " + (i + 1) + " has a value but no nickname.");
+      if (seen[name]) throw new Error("Duplicate nickname: " + name);
+      seen[name] = true;
+      obj[name] = value;
+    }
+    if (!Object.keys(obj).length) throw new Error("Add at least one variable.");
+    return obj;
+  }
+
+  // ---------- events ----------
+  function genKey() { $("key").value = bytesToHex(crypto.getRandomValues(new Uint8Array(32))); }
+
+  function copy(text, el, label) {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(function () {
+      var old = el.textContent; el.textContent = "Copied";
+      setTimeout(function () { el.textContent = old; }, 1200);
+    }, function () { alert("Copy failed. Select the text and copy it manually."); });
+  }
+
+  $("addRow").onclick = function () { addRow().focus(); };
+  $("genKey").onclick = genKey;
+  $("copyKey").onclick = function () { copy($("key").value.trim(), $("copyKey")); };
+  $("copyBundle").onclick = function () { copy($("bundle").value, $("copyBundle")); };
+
+  $("encrypt").onclick = async function () {
+    var msg = $("encMsg");
+    try {
+      if (!window.crypto || !crypto.subtle) throw new Error("Web Crypto is unavailable. Open this page via https:// or http://localhost, or as a local file in a modern browser.");
+      var keyHex = $("key").value.trim();
+      if (!HEX64.test(keyHex)) throw new Error("Key must be exactly 64 hex characters (0-9, a-f).");
+      var obj = collect();
+      var bundle = await encryptObject(obj, keyHex);
+      // verify round trip before handing it over
+      var check = await decryptBundle(bundle, keyHex);
+      if (JSON.stringify(check) !== JSON.stringify(obj)) throw new Error("Verification failed.");
+      $("bundle").value = bundle;
+      setMsg(msg, "Encrypted " + Object.keys(obj).length + " variable(s) and verified. Copy the bundle and the key.", "ok");
+    } catch (e) {
+      setMsg(msg, e.message || String(e), "err");
+    }
+  };
+
+  $("decrypt").onclick = async function () {
+    var msg = $("decMsg");
+    try {
+      var keyHex = $("oldKey").value.trim();
+      var b64 = $("oldBundle").value.trim();
+      if (!b64) throw new Error("Paste a bundle first.");
+      if (!HEX64.test(keyHex)) throw new Error("Key must be exactly 64 hex characters.");
+      var obj;
+      try { obj = await decryptBundle(b64, keyHex); }
+      catch (e) { throw new Error("Could not decrypt. Wrong key or damaged bundle."); }
+      $("rows").innerHTML = "";
+      Object.keys(obj).forEach(function (k) { addRow(k, obj[k]); });
+      $("key").value = keyHex;
+      setMsg(msg, "Loaded " + Object.keys(obj).length + " variable(s). The key above was set to the key you used.", "ok");
+    } catch (e) {
+      setMsg(msg, e.message || String(e), "err");
+    }
+  };
+
+  // ---------- meta bundle ----------
+  // Meta plaintext = JSON {k: keyHex, b: bundleString}; same IV+ciphertext+tag base64 format.
+  $("genMeta").onclick = function () {
+    $("metaKey").value = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
+    $("metaKey").type = "text";
+    $("showMeta").textContent = "Hide";
+  };
+  $("showMeta").onclick = function () {
+    var f = $("metaKey");
+    var show = f.type === "password";
+    f.type = show ? "text" : "password";
+    $("showMeta").textContent = show ? "Hide" : "Show";
+  };
+  $("copyMeta").onclick = function () { copy($("metaKey").value.trim(), $("copyMeta")); };
+  $("copyMetaBundle").onclick = function () { copy($("metaBundle").value.trim(), $("copyMetaBundle")); };
+
+  // Submitting the form is what lets the browser offer to save the meta key as a password.
+  $("metaForm").onsubmit = function (e) {
+    e.preventDefault();
+    var m = $("metaMsg");
+    if (!HEX64.test($("metaKey").value.trim())) { setMsg(m, "Meta key must be exactly 64 hex characters.", "err"); return; }
+    $("metaKey").type = "password";
+    $("showMeta").textContent = "Show";
+    setMsg(m, "If your browser asks to save the password, accept. (Browsers often won't offer this on a file:// page, so serve it from localhost or https if you want that.)", "ok");
+  };
+
+  $("metaEnc").onclick = async function () {
+    var m = $("metaMsg");
+    try {
+      var metaHex = $("metaKey").value.trim();
+      var keyHex = $("key").value.trim();
+      var bundle = $("bundle").value.trim();
+      if (!HEX64.test(metaHex)) throw new Error("Meta key must be exactly 64 hex characters. Use Generate meta key.");
+      if (!HEX64.test(keyHex)) throw new Error("The key in section 2 must be 64 hex characters.");
+      if (!bundle) throw new Error("No bundle yet. Run section 3 (Encrypt variables) first.");
+      var out = await encryptObject({ k: keyHex, b: bundle }, metaHex);
+      var check = await decryptBundle(out, metaHex);
+      if (check.k !== keyHex || check.b !== bundle) throw new Error("Verification failed.");
+      $("metaBundle").value = out;
+      setMsg(m, "Meta bundle created and verified. Store the meta key offline and the meta bundle wherever you like.", "ok");
+    } catch (e) { setMsg(m, e.message || String(e), "err"); }
+  };
+
+  $("metaDec").onclick = async function () {
+    var m = $("metaMsg");
+    try {
+      var metaHex = $("metaKey").value.trim();
+      var mb = $("metaBundle").value.trim();
+      if (!mb) throw new Error("Paste a meta bundle first.");
+      if (!HEX64.test(metaHex)) throw new Error("Meta key must be exactly 64 hex characters.");
+      var obj;
+      try { obj = await decryptBundle(mb, metaHex); }
+      catch (e) { throw new Error("Could not decrypt. Wrong meta key or damaged meta bundle."); }
+      if (!obj || !HEX64.test(obj.k || "") || !obj.b) throw new Error("Decrypted, but the contents are not a valid key + bundle.");
+      $("key").value = obj.k;
+      $("bundle").value = obj.b;
+      var note = "";
+      try {
+        var vars = await decryptBundle(obj.b, obj.k);
+        $("rows").innerHTML = "";
+        Object.keys(vars).forEach(function (k) { addRow(k, vars[k]); });
+        note = " Loaded " + Object.keys(vars).length + " variable(s) into section 1.";
+      } catch (e) { note = " (The inner bundle could not be decrypted with the recovered key.)"; }
+      setMsg(m, "Meta bundle decrypted. Key and bundle restored." + note, "ok");
+    } catch (e) { setMsg(m, e.message || String(e), "err"); }
+  };
+
+  $("printMeta").onclick = function () {
+    var m = $("metaMsg");
+    var mk = $("metaKey").value.trim(), mb = $("metaBundle").value.trim();
+    if (!HEX64.test(mk) || !mb) { setMsg(m, "Generate a meta key and create a meta bundle first.", "err"); return; }
+    $("pDate").textContent = new Date().toLocaleString();
+    $("pKey").textContent = mk;
+    //$("pBundle").textContent = mb;
+    window.print();
+  };
+
+  // ---------- init ----------
+  genKey();
+  addRow();
+  addRow();
+})();
+</script>
+</body>
+</html>
