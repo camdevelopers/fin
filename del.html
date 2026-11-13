@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Save Meta Key</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2330; --muted:#667085; --line:#d9dde4; --accent:#2f5bea; --ok:#1b7f3b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2128; --text:#e8eaee; --muted:#9aa3b2; --line:#323945; --accent:#6d8cff; --ok:#4cc275; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  .card { width:100%; max-width:420px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p { color:var(--muted); margin:0 0 12px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  input { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); font:inherit; }
+  button { margin-top:16px; padding:9px 16px; border:0; border-radius:6px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  .ok { color:var(--ok); font-weight:600; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- Login view -->
+  <form id="loginView" action="" method="get" autocomplete="on">
+    <h1>Save Meta Key</h1>
+    <p>Enter the username and your meta key, press Save, and accept the browser's "Save password?" prompt. Nothing is stored by this page.</p>
+    <label for="u">Username</label>
+    <!-- Keep this username the same as the one on token.html's login screen -->
+    <input id="u" name="username" type="text" value="token-builder" autocomplete="username">
+    <label for="p">Meta key</label>
+    <!-- No name attribute on purpose: the key is never put into the URL -->
+    <input id="p" type="password" autocomplete="current-password" spellcheck="false" required>
+    <input type="hidden" name="done" value="1">
+    <button type="submit">Save</button>
+  </form>
+
+  <!-- Result view (shown after the page reloads) -->
+  <div id="doneView" hidden>
+    <h1>Done</h1>
+    <p class="ok">Submitted. Your browser should have offered to save it.</p>
+    <p>You can close this page, or <a href="save-key.html">go back</a>.</p>
+  </div>
+
+</div>
+<script>
+  if (new URLSearchParams(location.search).get("done") === "1") {
+    document.getElementById("loginView").hidden = true;
+    document.getElementById("doneView").hidden = false;
+  }
+</script>
+</body>
+</html>
