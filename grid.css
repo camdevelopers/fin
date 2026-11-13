@@ -1,0 +1,245 @@
+/* ─── Reset & Base ─────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+  background: #0f0f0f;
+  color: #e4e4e7;
+  margin: 0;
+  padding: 24px;
+}
+
+#grid {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ─── Toolbar ──────────────────────────────────────────────────────────── */
+.grid-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 10px 10px 0 0;
+}
+
+.grid-view-select {
+  background: #27272a;
+  color: #e4e4e7;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.grid-view-select:hover { border-color: #52525b; }
+.grid-view-select:focus { border-color: #6366f1; }
+
+/* ─── Scroll Area ──────────────────────────────────────────────────────── */
+.grid-scroll {
+  overflow: auto;
+  max-height: 70vh;
+  background: #18181b;
+  border-left: 1px solid #27272a;
+  border-right: 1px solid #27272a;
+}
+
+/* ─── Table ────────────────────────────────────────────────────────────── */
+.grid-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.grid-table th,
+.grid-table td {
+  padding: 8px 12px;
+  white-space: nowrap;
+  text-align: left;
+  border-bottom: 1px solid #27272a;
+  border-right: none;
+}
+
+
+
+/* ─── Header Row (sticky) ──────────────────────────────────────────────── */
+.grid-table thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #1c1c1f;
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #3f3f46;
+  user-select: none;
+}
+
+.grid-sortable {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.grid-sortable:hover { color: #e4e4e7; }
+.grid-sort-arrow { font-size: 9px; margin-left: 4px; opacity: 0.6; }
+
+/* ─── Filter Row (sticky below header) ─────────────────────────────────── */
+.grid-table thead tr.grid-filter-row th {
+  position: sticky;
+  top: 37px;
+  z-index: 2;
+  padding: 4px 6px;
+  background: #161618;
+  border-bottom: 1px solid #3f3f46;
+}
+
+.grid-filter-input {
+  width: 100%;
+  border: 1px solid transparent;
+  background: #27272a;
+  color: #e4e4e7;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.grid-filter-input::placeholder { color: #52525b; }
+.grid-filter-input:focus {
+  border-color: #6366f1;
+  background: #1e1b4b22;
+}
+
+/* ─── Row Number Column ────────────────────────────────────────────────── */
+.grid-rownum-col {
+  width: 40px !important;
+  min-width: 40px !important;
+  text-align: center !important;
+  color: #52525b;
+  font-size: 11px;
+  background: #161618;
+  border-right: 1px solid #27272a;
+}
+
+.grid-rownum {
+  text-align: center;
+  color: #52525b;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Body Rows ────────────────────────────────────────────────────────── */
+.grid-table tbody tr {
+  transition: background 0.1s;
+}
+.grid-table tbody tr:hover {
+  background: #1f1f23;
+}
+.grid-table tbody tr:nth-child(even) {
+  background: #1a1a1e;
+}
+.grid-table tbody tr:nth-child(even):hover {
+  background: #1f1f23;
+}
+
+/* ─── Editable Cells ───────────────────────────────────────────────────── */
+.grid-td {
+  position: relative;
+  transition: background 0.1s;
+}
+
+.grid-td[contenteditable]:hover {
+  background: #27272a;
+  cursor: text;
+}
+
+.grid-td[contenteditable]:focus {
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+  background: #1e1b4b33;
+  color: #fff;
+}
+
+/* ─── Fill Handle ──────────────────────────────────────────────────────── */
+.grid-fill-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  background: #6366f1;
+  border-radius: 2px 0 0 0;
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.grid-td:hover .grid-fill-handle { opacity: 1; }
+
+.grid-fill-highlight {
+  background: #312e81 !important;
+}
+
+.grid-filling {
+  cursor: crosshair;
+  user-select: none;
+}
+
+/* ─── Footer ───────────────────────────────────────────────────────────── */
+.grid-footer {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: #71717a;
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+}
+
+/* ─── Tooltip ──────────────────────────────────────────────────────────── */
+.grid-tooltip {
+  position: fixed;
+  background: #18181b;
+  color: #e4e4e7;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  z-index: 9999;
+  pointer-events: none;
+  max-width: 320px;
+  line-height: 1.6;
+  border: 1px solid #3f3f46;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.grid-tooltip b {
+  color: #a1a1aa;
+  font-weight: 500;
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────────────────── */
+.grid-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.grid-scroll::-webkit-scrollbar-track {
+  background: #18181b;
+}
+.grid-scroll::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+.grid-scroll::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* ─── Selection ────────────────────────────────────────────────────────── */
+::selection {
+  background: #6366f1;
+  color: #fff;
+}   

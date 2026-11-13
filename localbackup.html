@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Local Backup</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; padding: 24px; }
+  h1 { font-size: 1.2rem; margin-bottom: 16px; }
+  .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); max-width: 480px; }
+  .card p { font-size: 0.85rem; color: #555; margin-bottom: 16px; }
+  button {
+    width: 100%; padding: 12px; background: #1a1a2e; color: #fff;
+    border: none; border-radius: 6px; font-size: 0.95rem; font-weight: 600;
+    cursor: pointer; margin-bottom: 10px;
+  }
+  button:disabled { opacity: 0.5; }
+  .status { font-size: 0.8rem; color: #666; margin-top: 8px; min-height: 1.2em; }
+  .error { color: #e53935; }
+  .file-list { font-size: 0.78rem; color: #444; margin-top: 12px; max-height: 200px; overflow-y: auto; }
+  .file-list div { padding: 3px 0; border-bottom: 1px solid #eee; }
+  a { font-size: 0.85rem; color: #1a1a2e; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>💾 Local Backup</h1>
+  <p>Exports rows stored in <strong>localStorage</strong> (no network needed). Works fully offline.</p>
+  <button id="btnBackup" onclick="doBackup()">⬇️ Download Local Backup (.zip)</button>
+  <div class="status" id="status"></div>
+  <div class="file-list" id="fileList"></div>
+  <br>
+  <a href="index.html">← Back to app</a>
+</div>
+
+<script>
+const SEP = "|";
+const HEADER = "user|type|date|detail|amount|value|receipt|file|remarks\n";
+
+async function doBackup() {
+  const btn = document.getElementById("btnBackup");
+  const status = document.getElementById("status");
+  const fileList = document.getElementById("fileList");
+
+  const raw = localStorage.getItem("fe_rows");
+  if (!raw) {
+    status.textContent = "No local data found. Open the app and sign in first.";
+    status.className = "status error";
+    return;
+  }
+
+  const rows = JSON.parse(raw);
+  if (!rows.length) {
+    status.textContent = "No rows in local storage.";
+    status.className = "status error";
+    return;
+  }
+
+  // Group by user + month (extracted from row id: user-month-timestamp or user-month-index-amount)
+  const groups = {};
+  for (const r of rows) {
+    // Row id format: `${user}-${month}-${...}` or `${user}-${index}-${amount}` (old format)
+    const parts = r.id.split("-");
+    const user = r.user;
+    // Try to extract month from id (format: user_YY_MM-...)
+    let month = "";
+    const idMatch = r.id.match(/(\d{2}_\d{2})/);
+    if (idMatch) month = idMatch[1];
+    else month = "unknown";
+
+    const key = `${user}_${month}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  }
+
+  // Show file list
+  const fileNames = Object.keys(groups).sort();
+  fileList.innerHTML = fileNames.map(f => `<div>${f}.csv (${groups[f].length} rows)</div>`).join("");
+
+  btn.disabled = true;
+  btn.textContent = "⏳ Creating ZIP…";
+  status.textContent = "";
+  status.className = "status";
+
+  try {
+    const zip = new JSZip();
+
+    for (const key of fileNames) {
+      const groupRows = groups[key];
+      let csv = HEADER;
+      for (const r of groupRows) {
+        csv += [r.user, r.type, r.date, r.detail, r.amount, r.value, r.receipt, r.file || "", r.remarks || ""].join(SEP) + "\n";
+      }
+      zip.file(`${key}.csv`, csv);
+    }
+
+    const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `local_backup_${new Date().toISOString().slice(0,10)}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    status.textContent = `✅ Done! ${fileNames.length} files, ${rows.length} rows, ${(blob.size / 1024).toFixed(1)} KB`;
+    btn.disabled = false;
+    btn.textContent = "⬇️ Download Local Backup (.zip)";
+
+  } catch (e) {
+    status.textContent = "❌ " + e.message;
+    status.className = "status error";
+    btn.disabled = false;
+    btn.textContent = "⬇️ Download Local Backup (.zip)";
+  }
+}
+</script>
+</body>
+</html>   
