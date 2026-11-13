@@ -52,7 +52,7 @@
 </head>
 <body>
 <div id="gate">
-  <form id="gateForm" action="about:blank" method="post" target="pwsink" autocomplete="on">
+  <form id="gateForm" action="#" method="post" autocomplete="on">
     <h1>Token Builder</h1>
     <p>Enter your meta key to unlock. First time? Generate one, press Unlock, and accept your browser's offer to save the password.</p>
     <label for="gUser">Username</label>
@@ -68,7 +68,6 @@
     </div>
     <div id="gMsg" class="msg"></div>
   </form>
-  <iframe name="pwsink" hidden></iframe>
 </div>
 
 <main id="app" hidden>
@@ -320,32 +319,33 @@
   // The gate is a real login form that submits (into a hidden iframe), so the browser
   // treats it as a login and offers to save the meta key as the password.
   $("gGen").onclick = function () {
+    // Keep the field a password field so the browser recognises this as a login.
     $("gKey").value = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
-    $("gKey").type = "text";
-    $("gShow").textContent = "Hide";
-    setMsg($("gMsg"), "New meta key generated. Press Unlock, then accept the browser's save-password prompt. Also print it from section 4.", "ok");
+    setMsg($("gMsg"), "New meta key generated (press Show to view it). Press Unlock, then accept the browser's save-password prompt. You can also print it from section 4.", "ok");
   };
-  $("gShow").onclick = function () {
-    var f = $("gKey");
-    var show = f.type === "password";
-    f.type = show ? "text" : "password";
+  function gateShow(show) {
+    $("gKey").type = show ? "text" : "password";
     $("gShow").textContent = show ? "Hide" : "Show";
-  };
+  }
+  $("gShow").onclick = function () { gateShow($("gKey").type === "password"); };
+  // Make sure the field is a password field before any submit (button click or Enter key).
+  $("gKey").addEventListener("keydown", function (e) { if (e.key === "Enter") gateShow(false); });
+  $("gateForm").querySelector("button[type=submit]").addEventListener("mousedown", function () { gateShow(false); });
+  $("gateForm").querySelector("button[type=submit]").addEventListener("click", function () { gateShow(false); });
+
   $("gateForm").onsubmit = function (e) {
+    e.preventDefault(); // stay on the page; we hide the form afterwards like an SPA login
     var v = $("gKey").value.trim();
     if (!HEX64.test(v)) {
-      e.preventDefault();
       setMsg($("gMsg"), "Meta key must be exactly 64 hex characters (0-9, a-f).", "err");
       return;
     }
-    $("gKey").value = v;
-    $("gKey").type = "password"; // must be a password field when the form submits
     $("metaKey").value = v;
-    // Let the native submit go through (to the hidden iframe), then reveal the app.
+    // Hiding the form right after submit is the signal browsers use to offer saving the password.
     setTimeout(function () {
       $("gate").hidden = true;
       $("app").hidden = false;
-    }, 100);
+    }, 50);
   };
   $("lockPage").onclick = function () {
     $("metaKey").value = "";
