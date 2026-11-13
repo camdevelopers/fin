@@ -33,20 +33,45 @@
   .msg.ok { color:var(--ok); }
   .warn { font-size:13px; color:var(--muted); border-left:3px solid var(--accent); padding-left:10px; margin-top:12px; }
   details summary { cursor:pointer; font-weight:600; }
-  .hp { position:absolute; left:-9999px; width:1px; height:1px; opacity:0; }
+  [hidden] { display:none !important; }
+  #gate { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px; }
+  #gate form { width:100%; max-width:420px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; }
+  #gate h1 { margin-bottom:4px; }
+  #gate p { color:var(--muted); margin:0 0 8px; }
   .inline { display:flex; gap:8px; }
   .inline input { flex:1; }
   #printSheet { display:none; }
   #printSheet pre { white-space:pre-wrap; word-break:break-all; font:13px/1.4 ui-monospace,Menlo,Consolas,monospace; border:1px solid #999; padding:10px; }
   @media print {
     body { background:#fff; color:#000; }
+    #gate { display:none !important; }
     main > h1, main > p.sub, main > section { display:none !important; }
     #printSheet { display:block; }
   }
 </style>
 </head>
 <body>
-<main>
+<div id="gate">
+  <form id="gateForm" action="about:blank" method="post" target="pwsink" autocomplete="on">
+    <h1>Token Builder</h1>
+    <p>Enter your meta key to unlock. First time? Generate one, press Unlock, and accept your browser's offer to save the password.</p>
+    <label for="gUser">Username</label>
+    <input id="gUser" name="username" type="text" value="token-builder" autocomplete="username">
+    <label for="gKey">Meta key (64-character hex)</label>
+    <div class="inline">
+      <input id="gKey" name="password" type="password" class="mono" spellcheck="false" autocomplete="current-password" autofocus>
+      <button id="gShow" type="button">Show</button>
+    </div>
+    <div class="actions">
+      <button type="submit" class="primary">Unlock</button>
+      <button id="gGen" type="button">Generate new meta key</button>
+    </div>
+    <div id="gMsg" class="msg"></div>
+  </form>
+  <iframe name="pwsink" hidden></iframe>
+</div>
+
+<main id="app" hidden>
   <h1>Token Builder</h1>
   <p class="sub">Add your variables, encrypt them with AES-256-GCM, and copy the bundle and key. Keep this page private (run it locally, don't publish it).</p>
 
@@ -86,19 +111,18 @@
     <h2>4. Meta bundle (safe to store in the cloud)</h2>
     <p class="sub" style="margin-bottom:8px">Wraps the key and the encrypted bundle together under a separate meta key. Keep the meta key on paper or in your browser's password manager, and store only the meta bundle in the cloud.</p>
 
-    <form id="metaForm" autocomplete="on">
-      <input class="hp" type="text" name="username" value="token-builder-meta-key" autocomplete="username" tabindex="-1" aria-hidden="true">
+    <div>
       <label for="metaKey">Meta key (64-character hex)</label>
       <div class="inline">
-        <input id="metaKey" name="password" type="password" class="mono" spellcheck="false" autocomplete="current-password">
+        <input id="metaKey" type="password" class="mono" spellcheck="false" autocomplete="off">
         <button id="showMeta" type="button">Show</button>
       </div>
       <div class="actions">
         <button id="genMeta" type="button">Generate meta key</button>
         <button id="copyMeta" type="button">Copy meta key</button>
-        <button id="saveMeta" type="submit">Save in browser password manager</button>
+        <button id="lockPage" type="button">Lock / change meta key</button>
       </div>
-    </form>
+    </div>
 
     <div class="actions" style="margin-top:14px">
       <button id="metaEnc" class="primary" type="button">Encrypt key + bundle into meta bundle</button>
@@ -292,14 +316,44 @@
   $("copyMeta").onclick = function () { copy($("metaKey").value.trim(), $("copyMeta")); };
   $("copyMetaBundle").onclick = function () { copy($("metaBundle").value.trim(), $("copyMetaBundle")); };
 
-  // Submitting the form is what lets the browser offer to save the meta key as a password.
-  $("metaForm").onsubmit = function (e) {
-    e.preventDefault();
-    var m = $("metaMsg");
-    if (!HEX64.test($("metaKey").value.trim())) { setMsg(m, "Meta key must be exactly 64 hex characters.", "err"); return; }
-    $("metaKey").type = "password";
-    $("showMeta").textContent = "Show";
-    setMsg(m, "If your browser asks to save the password, accept. (Browsers often won't offer this on a file:// page, so serve it from localhost or https if you want that.)", "ok");
+  // ---------- unlock gate ----------
+  // The gate is a real login form that submits (into a hidden iframe), so the browser
+  // treats it as a login and offers to save the meta key as the password.
+  $("gGen").onclick = function () {
+    $("gKey").value = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
+    $("gKey").type = "text";
+    $("gShow").textContent = "Hide";
+    setMsg($("gMsg"), "New meta key generated. Press Unlock, then accept the browser's save-password prompt. Also print it from section 4.", "ok");
+  };
+  $("gShow").onclick = function () {
+    var f = $("gKey");
+    var show = f.type === "password";
+    f.type = show ? "text" : "password";
+    $("gShow").textContent = show ? "Hide" : "Show";
+  };
+  $("gateForm").onsubmit = function (e) {
+    var v = $("gKey").value.trim();
+    if (!HEX64.test(v)) {
+      e.preventDefault();
+      setMsg($("gMsg"), "Meta key must be exactly 64 hex characters (0-9, a-f).", "err");
+      return;
+    }
+    $("gKey").value = v;
+    $("gKey").type = "password"; // must be a password field when the form submits
+    $("metaKey").value = v;
+    // Let the native submit go through (to the hidden iframe), then reveal the app.
+    setTimeout(function () {
+      $("gate").hidden = true;
+      $("app").hidden = false;
+    }, 100);
+  };
+  $("lockPage").onclick = function () {
+    $("metaKey").value = "";
+    $("gKey").value = "";
+    setMsg($("gMsg"), "", "");
+    $("app").hidden = true;
+    $("gate").hidden = false;
+    $("gKey").focus();
   };
 
   $("metaEnc").onclick = async function () {
@@ -349,7 +403,7 @@
     if (!HEX64.test(mk) || !mb) { setMsg(m, "Generate a meta key and create a meta bundle first.", "err"); return; }
     $("pDate").textContent = new Date().toLocaleString();
     $("pKey").textContent = mk;
-    //$("pBundle").textContent = mb;
+    $("pBundle").textContent = mb;
     window.print();
   };
 
