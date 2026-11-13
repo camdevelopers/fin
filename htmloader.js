@@ -105,7 +105,7 @@
     if (!s.owner || !s.repo || !s.pat) {
       loadPage("settings").catch(console.error);
     } else {
-      loadPage("home").catch(console.error);
+      loadPage("feelist").catch(console.error);
     }
   });
 
